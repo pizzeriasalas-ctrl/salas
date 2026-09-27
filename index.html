@@ -166,7 +166,11 @@ function pantallaPin(compartimento) {
     if (pin === comp.pin) {
       compartimentoActual = compartimento;
       pantallaCargando('Entrando…');
-      await pantallaPrincipal();
+      try {
+        await pantallaPrincipal();
+      } catch (e) {
+        mostrarError('cargar la pantalla principal', e);
+      }
     } else {
       document.getElementById('pin-error').textContent = 'PIN incorrecto, intenta de nuevo';
       pin = '';
@@ -186,8 +190,16 @@ async function pantallaPrincipal() {
 
   async function cargarVentasHoy() {
     const hoy = hoyISO();
-    const snap = await ventasRef.where('fecha', '==', hoy).orderBy('creadoEn', 'desc').get();
-    return snap.docs.map(d => d.data());
+    const snap = await conTiempoLimite(ventasRef.where('fecha', '==', hoy).get(), 15000, 'cargar ventas de hoy');
+    const lista = snap.docs.map(d => d.data());
+    // Ordenamos en el propio teléfono (más reciente primero) para no depender
+    // de un índice compuesto de Firestore que aún no existe.
+    lista.sort((a, b) => {
+      const ta = a.creadoEn && a.creadoEn.toMillis ? a.creadoEn.toMillis() : 0;
+      const tb = b.creadoEn && b.creadoEn.toMillis ? b.creadoEn.toMillis() : 0;
+      return tb - ta;
+    });
+    return lista;
   }
 
   async function render() {
