@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Pizzería Salas · Salteñería Salas</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<style>
+/* ============================================================
+   DESIGN SYSTEM — Pizzería Salas / Salteñería Salas
+   El color de acento es un solo "hue" (0-360, el círculo cromático
+   completo) y el modo claro/oscuro es independiente. Cambiar --hue
+   o [data-theme] cambia TODA la app sin tocar nada más.
+   ============================================================ */
+:root{
+  --hue: 328; /* rosa por defecto */
+  --accent: hsl(var(--hue) 68% 42%);
+  --accent-hover: hsl(var(--hue) 68% 35%);
+  --accent-light: hsl(var(--hue) 60% 93%);
+  --bg: #faf8f8;
+  --surface: #ffffff;
+  --surface-2: hsl(var(--hue) 20% 96%);
+  --text-primary: #211d20;
+  --text-secondary: #7c7579;
+  --border: hsl(var(--hue) 16% 89%);
+  --success: #1f7a4d;
+  --warning: #a16a12;
+  --danger: #b23a2e;
+  --info: #336a9e;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 3px rgba(20,10,15,0.06);
+  --shadow-md: 0 4px 16px rgba(20,10,15,0.08);
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px;
+}
+[data-theme="dark"]{
+  --bg: hsl(var(--hue) 14% 9%);
+  --surface: hsl(var(--hue) 13% 13%);
+  --surface-2: hsl(var(--hue) 11% 17%);
+  --text-primary: #f1edef;
+  --text-secondary: #a79fa5;
+  --border: hsl(var(--hue) 10% 23%);
+  --accent: hsl(var(--hue) 48% 54%);
+  --accent-hover: hsl(var(--hue) 48% 60%);
+  --accent-light: hsl(var(--hue) 35% 22%);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text-primary);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+.screen{max-width:480px;margin:0 auto;min-height:100vh;padding:0 0 32px;display:flex;flex-direction:column;}
+
+.t-title{font-size:1.5rem;font-weight:700;margin:0 0 2px;letter-spacing:-0.01em;}
+.t-subtitle{font-size:1.05rem;font-weight:600;margin:0 0 2px;}
+.t-body{font-size:0.95rem;line-height:1.4;}
+.t-secondary{font-size:0.85rem;color:var(--text-secondary);}
+.t-price{font-size:1.6rem;font-weight:800;color:var(--accent);}
+.t-eyebrow{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-secondary);font-weight:700;}
+
+.px{padding-left:var(--space-4);padding-right:var(--space-4);}
+.stack > * + *{margin-top:var(--space-3);}
+.row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);}
+.center{display:flex;flex-direction:column;align-items:center;text-align:center;}
+.grow{flex:1;}
+
+.header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4);}
+.header-btn{
+  width:38px;height:38px;border-radius:50%;border:1px solid var(--border);
+  background:var(--surface);display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;color:var(--text-primary);cursor:pointer;
+}
+
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:15px;border:none;border-radius:var(--radius-md);
+  font-size:1rem;font-weight:700;cursor:pointer;transition:transform .08s ease;
+}
+.btn:active{transform:scale(0.98);}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:var(--shadow-sm);}
+.btn-primary:disabled{opacity:0.45;}
+.btn-secondary{background:var(--accent-light);color:var(--accent);}
+.btn-tertiary{background:transparent;color:var(--text-secondary);}
+.btn-danger{background:#fde8e5;color:var(--danger);}
+
+.field{width:100%;}
+.field label{display:block;font-size:0.82rem;color:var(--text-secondary);margin-bottom:6px;font-weight:600;}
+.field input, .field select{
+  width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-size:0.98rem;background:var(--surface);color:var(--text-primary);
+}
+.field input:focus, .field select:focus{outline:none;border-color:var(--accent);}
+.search{position:relative;}
+.search input{padding-left:38px;}
+.search .icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-secondary);}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:var(--space-4);box-shadow:var(--shadow-sm);
+}
+.card-flat{background:var(--surface-2);border-radius:var(--radius-md);padding:var(--space-4);}
+
+.sucursal-item{
+  display:flex;align-items:center;gap:var(--space-3);
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);
+  padding:14px;margin-bottom:10px;cursor:pointer;
+}
+.sucursal-item .avatar{
+  width:42px;height:42px;border-radius:12px;background:var(--accent-light);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;
+}
+.sucursal-item .info{flex:1;min-width:0;}
+.sucursal-item .info .nombre{font-weight:700;font-size:0.98rem;}
+.sucursal-item .info .zona{font-size:0.8rem;color:var(--text-secondary);}
+.sucursal-item .arrow{color:var(--text-secondary);}
+
+.compartimento-card{
+  display:flex;align-items:center;gap:var(--space-3);width:100%;text-align:left;
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);
+  padding:18px;cursor:pointer;
+}
+.compartimento-card .emoji{font-size:1.8rem;}
+.compartimento-card .info .nombre{font-weight:700;font-size:1.05rem;}
+.compartimento-card .info .turno{font-size:0.82rem;color:var(--text-secondary);}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:0.72rem;font-weight:700;}
+.badge-neutral{background:var(--surface-2);color:var(--text-secondary);}
+.badge-success{background:#e2f6ec;color:var(--success);}
+.badge-warning{background:#fdf1de;color:var(--warning);}
+.badge-danger{background:#fde8e5;color:var(--danger);}
+.badge-accent{background:var(--accent-light);color:var(--accent);}
+
+.alert{display:flex;align-items:flex-start;gap:10px;padding:13px 14px;border-radius:var(--radius-md);font-size:0.88rem;}
+.alert-info{background:var(--accent-light);color:var(--accent);}
+.alert-warning{background:#fdf1de;color:var(--warning);}
+.alert-danger{background:#fde8e5;color:var(--danger);}
+
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:var(--space-6) 0;}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--accent);}
+.pin-dot.filled{background:var(--accent);}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 var(--space-4);}
+.keypad button{
+  aspect-ratio:1;border-radius:var(--radius-lg);border:1px solid var(--border);
+  background:var(--surface);font-size:1.4rem;font-weight:600;color:var(--text-primary);
+}
+.keypad button:active{background:var(--surface-2);}
+.keypad button.ok{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+.stat-row{display:flex;gap:10px;}
+.stat-box{flex:1;background:var(--surface-2);border-radius:var(--radius-md);padding:14px;text-align:center;}
+.stat-box .valor{font-size:1.3rem;font-weight:800;}
+.stat-box .lbl{font-size:0.75rem;color:var(--text-secondary);margin-top:2px;}
+
+.toggle{display:flex;gap:8px;}
+.toggle button{
+  flex:1;padding:11px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
+  background:var(--surface);color:var(--text-primary);font-weight:700;font-size:0.9rem;
+}
+.toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+.hue-strip{
+  height:44px;border-radius:22px;margin:var(--space-3) 0;position:relative;
+  background:linear-gradient(to right,
+    hsl(0 50% 45%), hsl(30 50% 45%), hsl(60 50% 42%), hsl(90 50% 40%),
+    hsl(120 45% 38%), hsl(150 45% 38%), hsl(180 42% 40%), hsl(210 48% 45%),
+    hsl(240 45% 48%), hsl(270 45% 45%), hsl(300 45% 42%), hsl(330 50% 42%), hsl(360 50% 45%));
+}
+.hue-strip input[type=range]{-webkit-appearance:none;width:100%;height:44px;background:transparent;margin:0;}
+.hue-strip input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;
+  border:3px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.3);
+}
+.swatch-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:var(--space-3);}
+.swatch{width:100%;aspect-ratio:1;border-radius:50%;border:2px solid transparent;cursor:pointer;}
+.swatch.selected{border-color:var(--text-primary);}
+
+.empty-state{text-align:center;padding:var(--space-8) var(--space-4);color:var(--text-secondary);}
+.empty-state .icon{font-size:2.2rem;margin-bottom:8px;}
+.error-text{color:var(--danger);font-size:0.85rem;text-align:center;min-height:1.2em;}
+
+.logo-mark{
+  width:84px;height:84px;border-radius:24px;background:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:2.2rem;
+  box-shadow:var(--shadow-md);margin-bottom:var(--space-4);
+}
+
+/* --- Header enriquecido --- */
+.avatar-circle{
+  width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05rem;flex-shrink:0;
+}
+.header-rich{display:flex;align-items:center;gap:12px;padding:var(--space-4);}
+.bell-btn{position:relative;}
+.bell-dot{
+  position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;
+  background:var(--danger);border:2px solid var(--surface);
+}
+
+/* --- Botón de acceso rápido con icono --- */
+.quick-btn{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--surface-2);border:none;border-radius:var(--radius-md);
+  padding:14px 6px;font-size:0.78rem;font-weight:700;color:var(--text-primary);flex:1;
+}
+.quick-btn .ic{font-size:1.35rem;}
+
+/* --- Gráfico de ventas por hora --- */
+.chart-bars{display:flex;align-items:flex-end;gap:6px;height:90px;margin-top:var(--space-3);}
+.chart-bars .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+.chart-bars .bar{width:100%;max-width:22px;border-radius:6px 6px 2px 2px;background:var(--accent-light);transition:height .3s ease;}
+.chart-bars .bar.filled{background:var(--accent);}
+.chart-bars .bar-lbl{font-size:0.62rem;color:var(--text-secondary);margin-top:4px;}
+
+/* --- Navegación inferior fija (reutilizable) --- */
+.bottom-nav{
+  position:sticky;bottom:0;display:flex;background:var(--surface);
+  border-top:1px solid var(--border);padding:8px 4px calc(8px + env(safe-area-inset-bottom,0px));
+  margin-top:auto;
+}
+.bottom-nav button{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:none;border:none;color:var(--text-secondary);font-size:0.66rem;font-weight:700;padding:4px;
+}
+.bottom-nav button .ic{font-size:1.3rem;}
+.bottom-nav button.active{color:var(--accent);}
+</style>
+</head>
+<body>
+
+<div id="app" class="screen">Cargando…</div>
+
+<script>
+// ============================================================
+// 1) TEMA — hue (0-360) + modo claro/oscuro, guardado por dispositivo
+// ============================================================
+function cargarTema() {
+  const hue = localStorage.getItem('salas_hue');
+  const modo = localStorage.getItem('salas_modo');
+  if (hue) document.documentElement.style.setProperty('--hue', hue);
+  if (modo === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+}
+function aplicarHue(hue) {
+  document.documentElement.style.setProperty('--hue', hue);
+  localStorage.setItem('salas_hue', hue);
+}
+function aplicarModo(modo) {
+  if (modo === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('salas_modo', modo);
+}
+cargarTema();
+
+// ============================================================
+// 2) Conexión a Firebase (proyecto real: salas-94cef) — SIN CAMBIOS
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDBH5au_DZDSUItcZtMuFXHIW_2mEJEG3o",
+  authDomain: "salas-94cef.firebaseapp.com",
+  projectId: "salas-94cef",
+  storageBucket: "salas-94cef.firebasestorage.app",
+  messagingSenderId: "537826891275",
+  appId: "1:537826891275:web:f8ad974c16f973fbf3d90e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('No se pudo activar persistencia offline:', err.code);
+});
+
+const SUCURSAL_PRUEBA_ID = 'periferica_prueba';
+const SUCURSAL_PRUEBA_NOMBRE = 'Periférica (PRUEBA)';
+const PIN_PIZZERIA_PRUEBA = '1111';
+const PIN_SALTENERIA_PRUEBA = '2222';
+
+async function asegurarSucursalPrueba() {
+  const ref = db.collection('sucursales').doc(SUCURSAL_PRUEBA_ID);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    await ref.set({
+      nombre: SUCURSAL_PRUEBA_NOMBRE,
+      zona: 'Sucursal de prueba',
+      orden: 1,
+      activo: true,
+      tieneSalteneria: true,
+      tieneCajasPizza: true,
+      compartimentos: {
+        pizzeria: { empleadoNombre: 'Empleado Pizzería (prueba)', pin: PIN_PIZZERIA_PRUEBA },
+        salteneria: { empleadoNombre: 'Empleado Salteñería (prueba)', pin: PIN_SALTENERIA_PRUEBA }
+      },
+      schemaVersion: 1
+    });
+  }
+}
+
+async function cargarSucursales() {
+  const snap = await conTiempoLimite(
+    db.collection('sucursales').where('activo', '==', true).get(),
+    15000, 'cargar sucursales'
+  );
+  const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  lista.sort((a, b) => (a.orden || 99) - (b.orden || 99));
+  return lista;
+}
+
+// ============================================================
+// 3) Estado de la app
+// ============================================================
+let sucursalActual = null;
+let compartimentoActual = null;
+const app = document.getElementById('app');
+
+// --- Catálogo global (compartido entre Ventas y Stock) ---
+const TAMANOS_PIZZA = ['Grande', 'Mediana', 'Pequeña', 'Escolar', 'Cono Pizza'];
+const SABORES_PIZZA = {
+  'Grande': ['Carnívora', 'Tradicional', 'Mixta', 'Hawaiana'],
+  'Mediana': ['Carnívora', 'Tradicional', 'Mixta', 'Hawaiana'],
+  'Pequeña': ['Carnívora', 'Tradicional', 'Mixta', 'Hawaiana'],
+  'Escolar': ['Tradicional', 'Mixta', 'Hawaiana'],
+  'Cono Pizza': []
+};
+const TAMANOS_REFRESCO = ['Personal', 'Cascada', 'Popular'];
+
+// --- Íconos lineales reutilizables (SVG, un solo trazo, heredan el color del texto) ---
+const ICONOS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>',
+  cart: '<circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M3 4h2l2.2 11.2a1.8 1.8 0 0 0 1.8 1.5h8a1.8 1.8 0 0 0 1.8-1.4L21 8H6"/>',
+  box: '<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5Z"/><path d="M3 8.5 12 13l9-4.5"/><path d="M12 13v7"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 2"/>',
+  wallet: '<rect x="3" y="6" width="18" height="13" rx="2.2"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.1"/>',
+  palette: '<circle cx="12" cy="12" r="9"/><circle cx="8.2" cy="10" r="1.1"/><circle cx="12" cy="8" r="1.1"/><circle cx="15.8" cy="10" r="1.1"/><circle cx="9" cy="15" r="1.1"/><path d="M12 21a2 2 0 0 1-2-2c0-1.1.9-1.4.9-2.3A1 1 0 0 0 10 16h-.2A9 9 0 1 1 21 12c0 1.8-1.2 2.3-2.6 2.3h-1.2a1.4 1.4 0 0 0-1.2 2.2c.3.5.6.9.6 1.5a2 2 0 0 1-2 2Z" fill="none"/>',
+  logout: '<path d="M9 20H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/>',
+  back: '<path d="M15 5 8 12l7 7"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/>',
+  camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.5" r="3.3"/>',
+  paperclip: '<path d="M8 12.5V8a4 4 0 0 1 8 0v9a2.5 2.5 0 0 1-5 0V9"/>',
+  check: '<path d="M4.5 12.5 9 17l10.5-11"/>',
+  pizza: '<path d="M12 3.5 4 20h16L12 3.5Z"/><circle cx="12" cy="13" r="1"/><circle cx="10" cy="16.5" r="1"/><circle cx="14" cy="16.5" r="1"/>',
+  empanada: '<path d="M4 12a8 8 0 0 1 16 0c0 4-3 7-8 9-5-2-8-5-8-9Z"/><path d="M8 12q4-2 8 0" fill="none"/>',
+  drink: '<path d="M7 3h10l-1 15.5a2 2 0 0 1-2 1.8h-4a2 2 0 0 1-2-1.8L7 3Z"/><path d="M6.3 7h11.4"/>',
+  store: '<path d="M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9"/><path d="M3 10l1.5-5h15L21 10"/><path d="M9 20v-6h6v6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 12H2M22 12h-2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/>',
+  cash: '<rect x="2.3" y="6.5" width="19.4" height="11" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M5.3 9v.01M18.7 15v.01"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.3h2"/>',
+  coffee: '<path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9Z"/><path d="M17 10h1.4a2.4 2.4 0 0 1 0 4.8H17"/><path d="M8 2.8c0 .9-1 1-1 1.9s1 1 1 1.9M12 2.8c0 .9-1 1-1 1.9s1 1 1 1.9"/>',
+  backspace: '<path d="M8.5 6h11a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19.5 18h-11L3 12l5.5-6Z"/><path d="M11 10l4.5 4M15.5 10 11 14"/>'
+};
+function ic(nombre, size) {
+  size = size || 20;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONOS[nombre] || ''}</svg>`;
+}
+
+function slug(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+}
+function itemsStockPizza() {
+  const items = [];
+  TAMANOS_PIZZA.forEach(t => {
+    if (SABORES_PIZZA[t].length === 0) items.push(t);
+    else SABORES_PIZZA[t].forEach(s => items.push(`${t} ${s}`));
+  });
+  return items; // nombres cortos, sin el prefijo "Pizza"
+}
+
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function conTiempoLimite(promesa, ms, etiqueta) {
+  return Promise.race([
+    promesa,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT:' + etiqueta)), ms))
+  ]);
+}
+
+function mostrarError(paso, e) {
+  const detalle = (e && (e.code || e.message)) ? (e.code || '') + ' ' + (e.message || e) : String(e);
+  app.innerHTML = `
+    <div class="px stack" style="padding-top:60px;">
+      <div class="t-title">No se pudo conectar</div>
+      <div class="t-secondary">Se quedó atascado en: <b>${paso}</b></div>
+      <div class="card"><div class="error-text" style="text-align:left;">${detalle}</div></div>
+      <button class="btn btn-primary" id="btn-reintentar">Reintentar</button>
+    </div>
+  `;
+  document.getElementById('btn-reintentar').onclick = iniciar;
+}
+
+// ============================================================
+// 4) PANTALLA: Selector de tema (accesible desde el header)
+// ============================================================
+function abrirSelectorTema(pantallaAnterior) {
+  const hueActual = getComputedStyle(document.documentElement).getPropertyValue('--hue').trim() || 328;
+  const modoActual = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const preset = [15, 340, 328, 300, 265, 230, 200, 170, 140, 95, 55, 30];
+
+  app.innerHTML = `
+    <div class="header">
+      <button class="header-btn" id="btn-cerrar">${ic('back')}</button>
+      <div class="t-subtitle">Elige tu color</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="px stack">
+      <div class="t-secondary">Desliza para elegir cualquier color del círculo cromático, o toca uno de los sugeridos.</div>
+      <div class="hue-strip">
+        <input type="range" min="0" max="360" value="${hueActual}" id="hue-slider">
+      </div>
+      <div class="swatch-grid" id="swatch-grid">
+        ${preset.map(h => `<div class="swatch ${String(h)===String(hueActual)?'selected':''}" data-hue="${h}" style="background:hsl(${h} 52% 40%)"></div>`).join('')}
+      </div>
+      <div class="t-eyebrow" style="margin-top:var(--space-5);">Apariencia</div>
+      <div class="toggle">
+        <button data-modo="light" class="${modoActual==='light'?'active':''}">${ic('sun',18)} Claro</button>
+        <button data-modo="dark" class="${modoActual==='dark'?'active':''}">${ic('moon',18)} Oscuro</button>
+      </div>
+      <div class="card" style="margin-top:var(--space-5);">
+        <div class="t-eyebrow">Vista previa</div>
+        <div class="row" style="margin-top:8px;">
+          <span class="badge badge-accent">Activo</span>
+          <span class="badge badge-success">Normal</span>
+          <span class="badge badge-warning">Bajo</span>
+        </div>
+        <button class="btn btn-primary" style="margin-top:12px;">Botón principal</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('btn-cerrar').onclick = pantallaAnterior;
+  document.getElementById('hue-slider').oninput = (e) => aplicarHue(e.target.value);
+  document.querySelectorAll('#swatch-grid .swatch').forEach(s => {
+    s.onclick = () => { aplicarHue(s.dataset.hue); abrirSelectorTema(pantallaAnterior); };
+  });
+  document.querySelectorAll('.toggle button').forEach(b => {
+    b.onclick = () => { aplicarModo(b.dataset.modo); abrirSelectorTema(pantallaAnterior); };
+  });
+}
+
+// ============================================================
+// 5) PANTALLA: Bienvenida
+// ============================================================
+function pantallaBienvenida() {
+  app.innerHTML = `
+    <div class="header" style="justify-content:flex-end;">
+      <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+    </div>
+    <div class="grow center px" style="justify-content:center;">
+      <div class="logo-mark">${ic('pizza',40)}</div>
+      <div class="t-title">PIZZERÍA SALAS</div>
+      <div class="t-title" style="color:var(--accent);">SALTEÑERÍA SALAS</div>
+      <div class="t-secondary" style="margin-top:8px;">Dos sabores, una sola app.</div>
+    </div>
+    <div class="px" style="padding-bottom:20px;">
+      <button class="btn btn-primary" id="btn-comenzar">Comenzar</button>
+    </div>
+  `;
+  document.getElementById('btn-tema').onclick = () => abrirSelectorTema(pantallaBienvenida);
+  document.getElementById('btn-comenzar').onclick = pantallaSeleccionSucursal;
+}
+
+// ============================================================
+// 6) PANTALLA: Selección de sucursal
+// ============================================================
+async function pantallaSeleccionSucursal() {
+  app.innerHTML = `<div class="empty-state">Cargando sucursales…</div>`;
+  let sucursales = [];
+  try {
+    sucursales = await cargarSucursales();
+  } catch (e) {
+    return mostrarError('cargar sucursales', e);
+  }
+
+  let enfocarBusqueda = false;
+  function render(filtro) {
+    filtro = filtro || '';
+    const filtradas = sucursales.filter(s => s.nombre.toLowerCase().includes(filtro.toLowerCase()));
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Selecciona tu sucursal</div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <div class="search">
+          <span class="icon">${ic('search',18)}</span>
+          <input type="text" id="in-buscar" placeholder="Buscar sucursal..." value="${filtro}">
+        </div>
+        <div id="lista-sucursales">
+          ${filtradas.length === 0 ? `
+            <div class="empty-state"><div class="icon">${ic('store',32)}</div>No se encontró esa sucursal.</div>
+          ` : filtradas.map((s, i) => `
+            <div class="sucursal-item" data-id="${s.id}">
+              <div class="avatar">${ic('store',20)}</div>
+              <div class="info">
+                <div class="nombre">Sucursal ${s.orden || i + 1} · ${s.nombre.replace(' (PRUEBA)','')}</div>
+                <div class="zona">${s.zona || 'Sucursal'}</div>
+              </div>
+              <div class="arrow">›</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = pantallaBienvenida;
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(() => render(filtro));
+    document.getElementById('in-buscar').oninput = (e) => { enfocarBusqueda = true; render(e.target.value); };
+    if (enfocarBusqueda) {
+      const campo = document.getElementById('in-buscar');
+      campo.focus();
+      campo.setSelectionRange(campo.value.length, campo.value.length);
+      enfocarBusqueda = false;
+    }
+    document.querySelectorAll('.sucursal-item').forEach(el => {
+      el.onclick = () => {
+        sucursalActual = sucursales.find(s => s.id === el.dataset.id);
+        pantallaElegirCompartimento();
+      };
+    });
+  }
+  render('');
+}
+
+// ============================================================
+// 7) PANTALLA: Selección de compartimento
+// ============================================================
+function pantallaElegirCompartimento() {
+  const tiene = sucursalActual.tieneSalteneria;
+  app.innerHTML = `
+    <div class="header">
+      <button class="header-btn" id="btn-atras">${ic('back')}</button>
+      <div class="t-subtitle">¿Qué área vas a usar?</div>
+      <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+    </div>
+    <div class="px stack">
+      <div class="t-secondary">${sucursalActual.nombre}</div>
+      <button class="compartimento-card" id="btn-pizzeria">
+        <span class="emoji">${ic('pizza',28)}</span>
+        <div class="info">
+          <div class="nombre">Pizzería</div>
+          <div class="turno">Turno tarde</div>
+        </div>
+      </button>
+      ${tiene ? `
+      <button class="compartimento-card" id="btn-salteneria">
+        <span class="emoji">${ic('empanada',28)}</span>
+        <div class="info">
+          <div class="nombre">Salteñería</div>
+          <div class="turno">Turno mañana</div>
+        </div>
+      </button>` : ''}
+          </div>
+  `;
+  document.getElementById('btn-atras').onclick = pantallaSeleccionSucursal;
+  document.getElementById('btn-tema').onclick = () => abrirSelectorTema(pantallaElegirCompartimento);
+  document.getElementById('btn-pizzeria').onclick = () => pantallaPin('pizzeria');
+  if (tiene) document.getElementById('btn-salteneria').onclick = () => pantallaPin('salteneria');
+}
+
+// ============================================================
+// 8) PANTALLA: Ingreso por PIN
+// ============================================================
+function pantallaPin(compartimento) {
+  let pin = '';
+  const nombreComp = compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+
+  function render() {
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Ingresa tu PIN</div>
+        <div style="width:38px;"></div>
+      </div>
+      <div class="px center">
+        <div class="badge badge-accent">${nombreComp}</div>
+        <div class="t-secondary" style="margin-top:6px;">${sucursalActual.nombre}</div>
+      </div>
+      <div class="pin-dots">
+        ${[0,1,2,3].map(i => `<div class="pin-dot ${i < pin.length ? 'filled' : ''}"></div>`).join('')}
+      </div>
+      <div class="keypad">
+        ${[1,2,3,4,5,6,7,8,9].map(n => `<button data-n="${n}">${n}</button>`).join('')}
+        <button data-n="borrar">${ic('backspace',20)}</button>
+        <button data-n="0">0</button>
+        <button data-n="ok" class="ok">${ic('check',20)}</button>
+      </div>
+      <div class="error-text" id="pin-error" style="margin-top:var(--space-4);"></div>
+      <div class="t-secondary" style="text-align:center;margin-top:8px;">PIN de prueba: ${compartimento === 'pizzeria' ? PIN_PIZZERIA_PRUEBA : PIN_SALTENERIA_PRUEBA}</div>
+    `;
+    document.getElementById('btn-atras').onclick = pantallaElegirCompartimento;
+    document.querySelectorAll('.keypad button').forEach(b => {
+      b.onclick = () => {
+        const n = b.dataset.n;
+        if (n === 'borrar') pin = pin.slice(0, -1);
+        else if (n === 'ok') validar();
+        else if (pin.length < 4) pin += n;
+        render();
+      };
+    });
+  }
+
+  async function validar() {
+    const comp = sucursalActual.compartimentos[compartimento];
+    if (pin === comp.pin) {
+      compartimentoActual = compartimento;
+      app.innerHTML = `<div class="empty-state">Entrando…</div>`;
+      try {
+        await pantallaPrincipal();
+      } catch (e) {
+        mostrarError('cargar la pantalla principal', e);
+      }
+    } else {
+      document.getElementById('pin-error').textContent = 'PIN incorrecto, intenta de nuevo';
+      pin = '';
+      render();
+    }
+  }
+
+  render();
+}
+
+// ============================================================
+// 9) PANTALLA: Inicio del empleado (lógica de ventas sin cambios)
+// ============================================================
+async function pantallaPrincipal() {
+  const comp = sucursalActual.compartimentos[compartimentoActual];
+  const nombreComp = compartimentoActual === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+  const compRef = db.collection('sucursales').doc(sucursalActual.id)
+    .collection('compartimentos').doc(compartimentoActual);
+  const ventasRef = compRef.collection('ventas');
+
+  // --- Catálogo (solo lo que corresponde a cada compartimento) ---
+  const tabsDisponibles = compartimentoActual === 'pizzeria'
+    ? [{ id: 'pizza', lbl: ic('pizza',16)+' Pizza' }, { id: 'refresco', lbl: ic('drink',16)+' Refresco' }, { id: 'cafe', lbl: ic('coffee',16)+' Café/Té' }]
+    : [{ id: 'saltena', lbl: ic('empanada',16)+' Salteña' }, { id: 'refresco', lbl: ic('drink',16)+' Refresco' }, { id: 'cafe', lbl: ic('coffee',16)+' Café/Té' }];
+
+  let tabActiva = tabsDisponibles[0].id;
+  let pizzaTamano = null;
+  let productoElegido = null; // texto final que se guarda como venta
+
+  function armarSelectorProducto() {
+    return `
+      <div class="toggle" id="tabs-producto">
+        ${tabsDisponibles.map(t => `<button class="${t.id===tabActiva?'active':''}" data-tab="${t.id}">${t.lbl}</button>`).join('')}
+      </div>
+      <div id="opciones-producto" style="margin-top:10px;"></div>
+      <div class="t-secondary" id="producto-elegido-lbl" style="margin-top:8px;"></div>
+    `;
+  }
+
+  function renderOpciones() {
+    const cont = document.getElementById('opciones-producto');
+    if (!cont) return;
+    if (tabActiva === 'pizza') {
+      if (!pizzaTamano) {
+        cont.innerHTML = `
+          <div class="t-eyebrow" style="margin-bottom:6px;">Tamaño</div>
+          <div class="stat-row" style="flex-wrap:wrap;">
+            ${TAMANOS_PIZZA.map(t => `<button class="btn btn-secondary" data-tamano="${t}" style="flex:1 1 45%;">${t}</button>`).join('')}
+          </div>
+        `;
+        cont.querySelectorAll('[data-tamano]').forEach(b => {
+          b.onclick = () => { pizzaTamano = b.dataset.tamano; renderOpciones(); };
+        });
+      } else if (SABORES_PIZZA[pizzaTamano].length === 0) {
+        seleccionarProducto(`Pizza ${pizzaTamano}`);
+        pizzaTamano = null;
+      } else {
+        cont.innerHTML = `
+          <div class="row"><div class="t-eyebrow">Sabor — ${pizzaTamano}</div><button class="t-secondary" id="btn-cambiar-tamano" style="background:none;border:none;">‹ cambiar tamaño</button></div>
+          <div class="stat-row" style="flex-wrap:wrap;margin-top:6px;">
+            ${SABORES_PIZZA[pizzaTamano].map(s => `<button class="btn btn-secondary" data-sabor="${s}" style="flex:1 1 45%;">${s}</button>`).join('')}
+          </div>
+        `;
+        document.getElementById('btn-cambiar-tamano').onclick = () => { pizzaTamano = null; renderOpciones(); };
+        const tamanoCongelado = pizzaTamano;
+        cont.querySelectorAll('[data-sabor]').forEach(b => {
+          b.onclick = () => { seleccionarProducto(`Pizza ${tamanoCongelado} ${b.dataset.sabor}`); pizzaTamano = null; };
+        });
+      }
+    } else if (tabActiva === 'saltena') {
+      cont.innerHTML = `<button class="btn btn-secondary" id="btn-saltena">Salteña mixta</button>`;
+      document.getElementById('btn-saltena').onclick = () => seleccionarProducto('Salteña mixta');
+    } else if (tabActiva === 'refresco') {
+      cont.innerHTML = `
+        <div class="stat-row" style="flex-wrap:wrap;">
+          ${TAMANOS_REFRESCO.map(t => `<button class="btn btn-secondary" data-refresco="${t}" style="flex:1 1 30%;">${t}</button>`).join('')}
+        </div>
+      `;
+      cont.querySelectorAll('[data-refresco]').forEach(b => {
+        b.onclick = () => seleccionarProducto(`Refresco ${b.dataset.refresco}`);
+      });
+    } else if (tabActiva === 'cafe') {
+      cont.innerHTML = `
+        <div class="stat-row">
+          <button class="btn btn-secondary" data-cafe="Café">Café</button>
+          <button class="btn btn-secondary" data-cafe="Té">Té</button>
+        </div>
+      `;
+      cont.querySelectorAll('[data-cafe]').forEach(b => {
+        b.onclick = () => seleccionarProducto(b.dataset.cafe);
+      });
+    }
+  }
+
+  function seleccionarProducto(nombre) {
+    productoElegido = nombre;
+    const lbl = document.getElementById('producto-elegido-lbl');
+    const btnAgregar = document.getElementById('btn-agregar');
+    if (lbl) lbl.innerHTML = `<span class="badge badge-accent">Elegido: ${nombre}</span>`;
+    if (btnAgregar) btnAgregar.disabled = false;
+  }
+
+  function wireSelectorProducto() {
+    document.querySelectorAll('#tabs-producto button').forEach(b => {
+      b.onclick = () => {
+        tabActiva = b.dataset.tab; pizzaTamano = null; productoElegido = null;
+        document.querySelectorAll('#tabs-producto button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        const lbl = document.getElementById('producto-elegido-lbl'); if (lbl) lbl.innerHTML = '';
+        const btnAgregar = document.getElementById('btn-agregar'); if (btnAgregar) btnAgregar.disabled = true;
+        renderOpciones();
+      };
+    });
+    renderOpciones();
+  }
+
+  async function cargarVentasHoy() {
+    const hoy = hoyISO();
+    const snap = await conTiempoLimite(ventasRef.where('fecha', '==', hoy).get(), 15000, 'cargar ventas de hoy');
+    const lista = snap.docs.map(d => d.data());
+    lista.sort((a, b) => {
+      const ta = a.creadoEn && a.creadoEn.toMillis ? a.creadoEn.toMillis() : 0;
+      const tb = b.creadoEn && b.creadoEn.toMillis ? b.creadoEn.toMillis() : 0;
+      return tb - ta;
+    });
+    return lista;
+  }
+
+  async function render() {
+    const [ventas, snapComp] = await Promise.all([cargarVentasHoy(), compRef.get()]);
+    const totalEfectivo = ventas.filter(v => v.formaPago === 'efectivo').reduce((a, v) => a + v.monto, 0);
+    const totalQr = ventas.filter(v => v.formaPago === 'qr').reduce((a, v) => a + v.monto, 0);
+    const totalHoy = totalEfectivo + totalQr;
+    const cajaEfectivoActual = snapComp.exists ? (snapComp.data().cajaEfectivo || 0) : 0;
+    const fechaHoyTexto = new Date().toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    // Ventas por hora (real, a partir de los timestamps de hoy)
+    const horaInicio = 8, horaFin = 21; // franja horaria típica de atención
+    const porHora = {};
+    for (let h = horaInicio; h <= horaFin; h++) porHora[h] = 0;
+    ventas.forEach(v => {
+      if (v.creadoEn && v.creadoEn.toDate) {
+        const h = v.creadoEn.toDate().getHours();
+        if (porHora[h] !== undefined) porHora[h] += v.monto;
+      }
+    });
+    const maxHora = Math.max(1, ...Object.values(porHora));
+    const horasAMostrar = [8,10,12,14,16,18,20];
+    const iniciales = (comp.empleadoNombre.replace(' (prueba)','').match(/\b\w/g) || ['E']).slice(0,2).join('').toUpperCase();
+
+    app.innerHTML = `
+      <div class="header-rich">
+        <div class="avatar-circle">${iniciales}</div>
+        <div class="grow">
+          <div class="t-subtitle">Hola, ${comp.empleadoNombre.replace(' (prueba)','')}</div>
+          <div class="t-secondary">${sucursalActual.nombre.replace(' (PRUEBA)','')} · ${nombreComp}</div>
+        </div>
+        <button class="header-btn bell-btn" id="btn-tema">${ic('palette')}</button>
+        <button class="header-btn" id="btn-salir">${ic('logout')}</button>
+      </div>
+      <div class="px stack">
+        <div class="t-secondary" style="text-transform:capitalize;margin-top:-6px;">${fechaHoyTexto}</div>
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="valor">${totalHoy.toFixed(0)} Bs</div>
+            <div class="lbl">${ic('cart',13)} Ventas hoy</div>
+          </div>
+          <div class="stat-box">
+            <div class="valor">${cajaEfectivoActual.toFixed(0)} Bs</div>
+            <div class="lbl">${ic('cash',13)} Caja efectivo</div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-mostrar-form">+ Registrar venta</button>
+
+        <div class="card" id="form-venta" style="display:none;">
+          ${armarSelectorProducto()}
+          <div class="field" style="margin-top:12px;"><label>Precio unitario en Bs</label><input type="number" id="in-monto" inputmode="decimal" placeholder="0.00"></div>
+          <div class="field" style="margin-top:10px;">
+            <label>Cantidad</label>
+            <div class="row" style="gap:10px;">
+              <button class="header-btn" id="btn-menos-cant">−</button>
+              <span id="lbl-cantidad" style="min-width:30px;text-align:center;font-weight:700;font-size:1.1rem;">1</span>
+              <button class="header-btn" id="btn-mas-cant">+</button>
+              <span class="t-secondary" id="lbl-total-venta" style="margin-left:auto;"></span>
+            </div>
+          </div>
+          <div class="toggle" id="toggle-pago" style="margin-top:10px;">
+            <button class="active" data-pago="efectivo">${ic('cash',16)} Efectivo</button>
+            <button data-pago="qr">${ic('phone',16)} QR</button>
+          </div>
+          <button class="btn btn-primary" id="btn-agregar" style="margin-top:12px;" disabled>Agregar venta</button>
+          <div class="error-text" id="venta-error"></div>
+        </div>
+
+        <div class="t-eyebrow" style="margin-top:var(--space-2);">Ventas de hoy (${ventas.length})</div>
+        <div class="card-flat">
+          ${ventas.length === 0 ? `<div class="t-secondary">Aún no hay ventas registradas hoy.</div>` : ventas.map(v => `
+            <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+              <span class="t-body">${v.cantidad > 1 ? v.cantidad + 'x ' : ''}${v.producto} <span class="t-secondary">${v.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span></span>
+              <strong>${v.monto.toFixed(2)} Bs</strong>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <button class="active"><span class="ic">${ic('home')}</span>Inicio</button>
+        <button id="btn-ir-stock-nav"><span class="ic">${ic('box')}</span>Stock</button>
+        <button data-nav="historial"><span class="ic">${ic('clock')}</span>Historial</button>
+        <button data-nav="caja"><span class="ic">${ic('wallet')}</span>Caja</button>
+      </div>
+    `;
+
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.getElementById('btn-salir').onclick = () => { compartimentoActual = null; pantallaElegirCompartimento(); };
+    document.getElementById('btn-mostrar-form').onclick = () => {
+      document.getElementById('form-venta').style.display = 'block';
+      document.getElementById('btn-mostrar-form').style.display = 'none';
+      wireSelectorProducto();
+    };
+    document.getElementById('btn-ir-stock-nav').onclick = () => pantallaStock().catch(e => mostrarError('abrir stock', e));
+    document.querySelectorAll('[data-nav="historial"]').forEach(b => {
+      b.onclick = () => pantallaHistorial().catch(e => mostrarError('abrir historial', e));
+    });
+    document.querySelectorAll('[data-nav="caja"]').forEach(b => {
+      b.onclick = () => pantallaCaja().catch(e => mostrarError('abrir caja', e));
+    });
+    document.querySelectorAll('[data-proximamente]').forEach(b => {
+      b.onclick = () => alert(b.dataset.proximamente + ': próximamente en esta base visual.');
+    });
+
+    let formaPago = 'efectivo';
+    document.querySelectorAll('#toggle-pago button').forEach(b => {
+      b.onclick = () => {
+        formaPago = b.dataset.pago;
+        document.querySelectorAll('#toggle-pago button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      };
+    });
+
+    let cantidadVenta = 1;
+    function actualizarTotalVenta() {
+      const unitario = parseFloat(document.getElementById('in-monto').value) || 0;
+      document.getElementById('lbl-cantidad').textContent = cantidadVenta;
+      document.getElementById('lbl-total-venta').textContent = unitario > 0
+        ? `Total: ${(unitario * cantidadVenta).toFixed(2)} Bs` : '';
+    }
+    document.getElementById('btn-mas-cant').onclick = () => { cantidadVenta++; actualizarTotalVenta(); };
+    document.getElementById('btn-menos-cant').onclick = () => { if (cantidadVenta > 1) cantidadVenta--; actualizarTotalVenta(); };
+    document.getElementById('in-monto').oninput = actualizarTotalVenta;
+
+    document.getElementById('btn-agregar').onclick = async () => {
+      const producto = productoElegido;
+      const unitario = parseFloat(document.getElementById('in-monto').value);
+      const cantidad = cantidadVenta;
+      const monto = unitario * cantidad;
+      const errorEl = document.getElementById('venta-error');
+      if (!producto || isNaN(unitario) || unitario <= 0) {
+        errorEl.textContent = 'Elige un producto y un precio válido';
+        return;
+      }
+      errorEl.textContent = 'Guardando…';
+      try {
+        const refStock = referenciaStock(producto);
+        await db.runTransaction(async (tx) => {
+          if (refStock) {
+            const snap = await tx.get(refStock);
+            const actual = snap.exists ? (snap.data().cantidad || 0) : 0;
+            if (actual < cantidad) throw new Error('SIN_STOCK');
+            tx.set(refStock, { producto: refStock.nombreCorto, cantidad: actual - cantidad }, { merge: true });
+          }
+          tx.set(ventasRef.doc(), {
+            producto, cantidad, precioUnitario: unitario, monto, formaPago,
+            fecha: hoyISO(),
+            creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+            schemaVersion: 1
+          });
+          // La caja se acumula hasta que la dueña la retira (no se reinicia cada día)
+          tx.set(compRef, {
+            cajaEfectivo: firebase.firestore.FieldValue.increment(formaPago === 'efectivo' ? monto : 0),
+            cajaTotal: firebase.firestore.FieldValue.increment(monto)
+          }, { merge: true });
+        });
+        await render();
+      } catch (e) {
+        if (e.message === 'SIN_STOCK') {
+          errorEl.textContent = `No hay suficiente stock de "${producto}" para esa cantidad.`;
+        } else {
+          errorEl.textContent = 'No se pudo guardar (sin internet: se guardará solo cuando vuelva la conexión)';
+        }
+      }
+    };
+  }
+
+  function referenciaStock(producto) {
+    if (producto.startsWith('Pizza ')) {
+      const nombreCorto = producto.replace('Pizza ', '');
+      return Object.assign(
+        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria')
+          .collection('stock').doc(slug(nombreCorto)),
+        { nombreCorto }
+      );
+    }
+    if (producto === 'Salteña mixta') {
+      return Object.assign(
+        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('salteneria')
+          .collection('stock').doc('saltena-mixta'),
+        { nombreCorto: 'Salteña mixta' }
+      );
+    }
+    if (producto.startsWith('Refresco ')) {
+      const nombreCorto = producto.replace('Refresco ', '');
+      return Object.assign(
+        db.collection('sucursales').doc(sucursalActual.id).collection('stockRefrescos').doc(slug(nombreCorto)),
+        { nombreCorto }
+      );
+    }
+    return null; // café/té no llevan stock
+  }
+
+  await render();
+}
+
+// ============================================================
+// 9b) PANTALLA: Stock (ver actual + agregar en bloque)
+// ============================================================
+function listaItemsStock() {
+  // nombre corto (sin "Pizza"/"Refresco") + a qué colección/documento corresponde
+  const items = [];
+  if (compartimentoActual === 'pizzeria') {
+    itemsStockPizza().forEach(nombreCorto => items.push({
+      nombreCorto, categoria: 'Pizzas',
+      ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria').collection('stock').doc(slug(nombreCorto))
+    }));
+  } else {
+    items.push({
+      nombreCorto: 'Salteña mixta', categoria: 'Salteñas',
+      ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('salteneria').collection('stock').doc('saltena-mixta')
+    });
+  }
+  TAMANOS_REFRESCO.forEach(t => items.push({
+    nombreCorto: t, categoria: 'Refrescos (compartido)',
+    ref: db.collection('sucursales').doc(sucursalActual.id).collection('stockRefrescos').doc(slug(t))
+  }));
+  return items;
+}
+
+async function pantallaStock() {
+  app.innerHTML = `<div class="empty-state">Cargando stock…</div>`;
+  const items = listaItemsStock();
+  let actuales;
+  try {
+    const snaps = await conTiempoLimite(Promise.all(items.map(it => it.ref.get())), 15000, 'cargar stock');
+    actuales = snaps.map(s => (s.exists ? s.data().cantidad : 0) || 0);
+  } catch (e) {
+    return mostrarError('cargar stock', e);
+  }
+
+  function render() {
+    const porCategoria = {};
+    items.forEach((it, i) => {
+      porCategoria[it.categoria] = porCategoria[it.categoria] || [];
+      porCategoria[it.categoria].push({ ...it, cantidad: actuales[i] });
+    });
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Stock</div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <button class="btn btn-primary" id="btn-agregar-bloque">+ Agregar stock en bloque</button>
+        <button class="btn btn-secondary" id="btn-dar-baja">− Dar de baja un producto</button>
+        ${Object.keys(porCategoria).map(cat => `
+          <div class="t-eyebrow" style="margin-top:var(--space-3);">${cat}</div>
+          <div class="card-flat">
+            ${porCategoria[cat].map(it => `
+              <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                <span class="t-body">${it.nombreCorto}</span>
+                <span class="badge ${it.cantidad <= 0 ? 'badge-danger' : 'badge-neutral'}">${it.cantidad} und.</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('')}
+      </div>
+      <div class="bottom-nav">
+        <button data-nav="inicio"><span class="ic">${ic('home')}</span>Inicio</button>
+        <button class="active"><span class="ic">${ic('box')}</span>Stock</button>
+        <button data-nav="historial"><span class="ic">${ic('clock')}</span>Historial</button>
+        <button data-nav="caja"><span class="ic">${ic('wallet')}</span>Caja</button>
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = () => pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.getElementById('btn-agregar-bloque').onclick = () => pantallaAgregarStock(items, actuales, render);
+    document.getElementById('btn-dar-baja').onclick = () => pantallaDarDeBaja(items, actuales, render);
+    document.querySelectorAll('[data-nav]').forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.nav === 'inicio') pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
+        else if (b.dataset.nav === 'historial') pantallaHistorial().catch(e => mostrarError('abrir historial', e));
+        else if (b.dataset.nav === 'caja') pantallaCaja().catch(e => mostrarError('abrir caja', e));
+        else alert(b.dataset.nav + ': próximamente en esta base visual.');
+      };
+    });
+  }
+  render();
+}
+
+function pantallaAgregarStock(items, actuales, volver) {
+  const cantidadesAAgregar = items.map(() => 0);
+
+  function render() {
+    const total = cantidadesAAgregar.reduce((a, b) => a + b, 0);
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Agregar stock</div>
+        <div style="width:38px;"></div>
+      </div>
+      <div class="px stack">
+        <div class="t-secondary">Ajusta la cantidad que llegó de cada producto. Lo que dejes en 0 no se agrega.</div>
+        <div class="card-flat">
+          ${items.map((it, i) => `
+            <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);">
+              <span class="t-body">${it.nombreCorto}</span>
+              <div class="row" style="gap:4px;width:auto;">
+                <button class="header-btn" data-menos="${i}">−</button>
+                <span style="min-width:24px;text-align:center;font-weight:700;">${cantidadesAAgregar[i]}</span>
+                <button class="header-btn" data-mas="${i}">+</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="px" style="padding-top:12px;">
+        <button class="btn btn-primary" id="btn-confirmar-stock" ${total === 0 ? 'disabled' : ''}>Confirmar (${total} unidades)</button>
+        <div class="error-text" id="stock-error"></div>
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = volver;
+    document.querySelectorAll('[data-mas]').forEach(b => {
+      b.onclick = () => { cantidadesAAgregar[b.dataset.mas]++; render(); };
+    });
+    document.querySelectorAll('[data-menos]').forEach(b => {
+      b.onclick = () => { const i = b.dataset.menos; if (cantidadesAAgregar[i] > 0) cantidadesAAgregar[i]--; render(); };
+    });
+    document.getElementById('btn-confirmar-stock').onclick = async () => {
+      const errorEl = document.getElementById('stock-error');
+      errorEl.textContent = 'Guardando…';
+      try {
+        await Promise.all(items.map((it, i) => {
+          if (cantidadesAAgregar[i] === 0) return Promise.resolve();
+          actuales[i] = (actuales[i] || 0) + cantidadesAAgregar[i];
+          return it.ref.set({ producto: it.nombreCorto, cantidad: firebase.firestore.FieldValue.increment(cantidadesAAgregar[i]) }, { merge: true });
+        }));
+        volver();
+      } catch (e) {
+        errorEl.textContent = 'No se pudo guardar el stock.';
+      }
+    };
+  }
+  render();
+}
+
+function pantallaDarDeBaja(items, actuales, volver) {
+  let seleccionado = null; // índice en items
+  let cantidad = 1;
+  const motivos = ['Producto dañado', 'Vencido', 'Perdido', 'Otro'];
+  let motivo = motivos[0];
+
+  function render() {
+    const disponible = seleccionado !== null ? (actuales[seleccionado] || 0) : null;
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Dar de baja</div>
+        <div style="width:38px;"></div>
+      </div>
+      <div class="px stack">
+        <div class="field">
+          <label>Producto</label>
+          <select id="sel-producto">
+            <option value="">Elige un producto…</option>
+            ${items.map((it, i) => `<option value="${i}" ${seleccionado === i ? 'selected' : ''}>${it.nombreCorto} (${actuales[i] || 0} und.)</option>`).join('')}
+          </select>
+        </div>
+        ${seleccionado !== null && disponible <= 0 ? `
+          <div class="t-secondary">Este producto no tiene stock registrado, no hay nada que dar de baja.</div>
+        ` : seleccionado !== null ? `
+          <div class="t-secondary">Stock actual: ${disponible} unidad(es)</div>
+          <div class="field">
+            <label>Cantidad a dar de baja</label>
+            <div class="row" style="gap:10px;">
+              <button class="header-btn" id="btn-menos-baja">−</button>
+              <span style="min-width:30px;text-align:center;font-weight:700;font-size:1.1rem;">${cantidad}</span>
+              <button class="header-btn" id="btn-mas-baja">+</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Motivo</label>
+            <select id="sel-motivo">
+              ${motivos.map(m => `<option ${m === motivo ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <button class="btn btn-danger" id="btn-confirmar-baja">Confirmar baja</button>
+        ` : ''}
+        <div class="error-text" id="baja-error"></div>
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = volver;
+    document.getElementById('sel-producto').onchange = (e) => {
+      seleccionado = e.target.value === '' ? null : parseInt(e.target.value);
+      cantidad = 1;
+      render();
+    };
+    if (seleccionado !== null && disponible > 0) {
+      document.getElementById('btn-mas-baja').onclick = () => { if (cantidad < disponible) cantidad++; render(); };
+      document.getElementById('btn-menos-baja').onclick = () => { if (cantidad > 1) cantidad--; render(); };
+      document.getElementById('sel-motivo').onchange = (e) => { motivo = e.target.value; };
+      document.getElementById('btn-confirmar-baja').onclick = async () => {
+        const errorEl = document.getElementById('baja-error');
+        const it = items[seleccionado];
+        errorEl.textContent = 'Guardando…';
+        try {
+          await db.runTransaction(async (tx) => {
+            const snap = await tx.get(it.ref);
+            const actual = snap.exists ? (snap.data().cantidad || 0) : 0;
+            if (cantidad > actual) throw new Error('EXCEDE_STOCK');
+            tx.set(it.ref, { producto: it.nombreCorto, cantidad: actual - cantidad }, { merge: true });
+            if (it.categoria === 'Refrescos (compartido)') {
+              // El refresco es stock compartido entre Pizzería y Salteñería: la baja se guarda
+              // a nivel de sucursal (no de un compartimento) para que ambos lados la vean,
+              // etiquetada con quién la hizo.
+              const mermasCompartidasRef = db.collection('sucursales').doc(sucursalActual.id).collection('mermasCompartidas');
+              tx.set(mermasCompartidasRef.doc(), {
+                producto: it.nombreCorto, cantidad, motivo,
+                realizadoPor: compartimentoActual,
+                fecha: hoyISO(),
+                creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+                schemaVersion: 1
+              });
+            } else {
+              const compRefBaja = db.collection('sucursales').doc(sucursalActual.id)
+                .collection('compartimentos').doc(compartimentoActual);
+              tx.set(compRefBaja.collection('mermas').doc(), {
+                producto: it.nombreCorto, cantidad, motivo,
+                fecha: hoyISO(),
+                creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+                schemaVersion: 1
+              });
+            }
+          });
+          actuales[seleccionado] -= cantidad;
+          volver();
+        } catch (e) {
+          errorEl.textContent = e.message === 'EXCEDE_STOCK'
+            ? 'No puedes dar de baja más de lo que hay en stock.'
+            : 'No se pudo guardar la baja.';
+        }
+      };
+    }
+  }
+  render();
+}
+
+// ============================================================
+// 9c) PANTALLA: Historial (ventas de días anteriores, por día)
+// ============================================================
+async function pantallaHistorial() {
+  app.innerHTML = `<div class="empty-state">Cargando historial…</div>`;
+  const nombreComp = compartimentoActual === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+  const compRef = db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual);
+  const ventasRef = compRef.collection('ventas');
+  const gastosRef = compRef.collection('gastos');
+  const mermasRef = compRef.collection('mermas');
+  const retirosRef = compRef.collection('retiros');
+  const mermasCompartidasRef = db.collection('sucursales').doc(sucursalActual.id).collection('mermasCompartidas');
+
+  let movimientos;
+  try {
+    const [snapV, snapG, snapM, snapR, snapMC] = await conTiempoLimite(Promise.all([
+      ventasRef.orderBy('fecha', 'desc').limit(300).get(),
+      gastosRef.orderBy('fecha', 'desc').limit(300).get(),
+      mermasRef.orderBy('fecha', 'desc').limit(300).get(),
+      retirosRef.orderBy('fecha', 'desc').limit(100).get(),
+      mermasCompartidasRef.orderBy('fecha', 'desc').limit(300).get()
+    ]), 15000, 'cargar historial');
+    const ventas = snapV.docs.map(d => ({ tipo: 'venta', ...d.data() }));
+    const gastos = snapG.docs.map(d => ({ tipo: 'gasto', ...d.data() }));
+    const mermas = snapM.docs.map(d => ({ tipo: 'merma', ...d.data() }));
+    const retiros = snapR.docs.map(d => ({ tipo: 'retiro', ...d.data() }));
+    const mermasCompartidas = snapMC.docs.map(d => ({ tipo: 'merma', compartida: true, ...d.data() }));
+    movimientos = ventas.concat(gastos, mermas, mermasCompartidas, retiros);
+  } catch (e) {
+    return mostrarError('cargar historial', e);
+  }
+
+  const porDia = {};
+  movimientos.forEach(m => {
+    porDia[m.fecha] = porDia[m.fecha] || [];
+    porDia[m.fecha].push(m);
+  });
+  Object.values(porDia).forEach(lista => lista.sort((a, b) => {
+    const ta = a.creadoEn && a.creadoEn.toMillis ? a.creadoEn.toMillis() : 0;
+    const tb = b.creadoEn && b.creadoEn.toMillis ? b.creadoEn.toMillis() : 0;
+    return tb - ta;
+  }));
+  const dias = Object.keys(porDia).sort((a, b) => b.localeCompare(a));
+  let diaAbierto = dias[0] || null;
+  let filtro = 'todos'; // todos | ventas | gastos | bajas
+
+  function render() {
+    const tipoPorFiltro = { ventas: 'venta', gastos: 'gasto', bajas: 'merma', retiros: 'retiro' };
+    const hayResultados = filtro === 'todos' || movimientos.some(m => m.tipo === tipoPorFiltro[filtro]);
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Historial · ${nombreComp}</div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <div class="toggle" id="toggle-filtro">
+          <button class="${filtro==='todos'?'active':''}" data-f="todos">Todos</button>
+          <button class="${filtro==='ventas'?'active':''}" data-f="ventas">Ventas</button>
+          <button class="${filtro==='gastos'?'active':''}" data-f="gastos">Gastos</button>
+          <button class="${filtro==='bajas'?'active':''}" data-f="bajas">Bajas</button>
+          <button class="${filtro==='retiros'?'active':''}" data-f="retiros">Retiros</button>
+        </div>
+        ${dias.length === 0 || !hayResultados ? `<div class="empty-state">${ic('clock',32)}<div>No hay movimientos de este tipo todavía.</div></div>` : dias.map(f => {
+          let itemsDia = porDia[f];
+          if (filtro === 'ventas') itemsDia = itemsDia.filter(m => m.tipo === 'venta');
+          if (filtro === 'gastos') itemsDia = itemsDia.filter(m => m.tipo === 'gasto');
+          if (filtro === 'bajas') itemsDia = itemsDia.filter(m => m.tipo === 'merma');
+          if (filtro === 'retiros') itemsDia = itemsDia.filter(m => m.tipo === 'retiro');
+          if (itemsDia.length === 0) return '';
+          const totalVentas = itemsDia.filter(m => m.tipo === 'venta').reduce((a, m) => a + m.monto, 0);
+          const totalGastos = itemsDia.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
+          const totalBajas = itemsDia.filter(m => m.tipo === 'merma').reduce((a, m) => a + m.cantidad, 0);
+          const abierto = f === diaAbierto;
+          return `
+          <div class="card" data-dia="${f}">
+            <div class="row" style="cursor:pointer;">
+              <div>
+                <div class="t-subtitle">${formatearFecha(f)}</div>
+                <div class="t-secondary">${itemsDia.length} movimiento(s)</div>
+              </div>
+              <div style="text-align:right;">
+                ${totalVentas > 0 ? `<div class="t-price" style="font-size:1.05rem;">+${totalVentas.toFixed(2)} Bs</div>` : ''}
+                ${totalGastos > 0 ? `<div style="color:var(--danger);font-weight:700;font-size:0.9rem;">−${totalGastos.toFixed(2)} Bs</div>` : ''}
+                ${totalBajas > 0 ? `<div class="t-secondary" style="font-size:0.8rem;">${totalBajas} unidad(es) de baja</div>` : ''}
+              </div>
+            </div>
+            ${abierto ? `
+              <div style="margin-top:10px;">
+                ${itemsDia.map(m => {
+                  if (m.tipo === 'venta') return `
+                  <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="t-body">${m.cantidad > 1 ? m.cantidad + 'x ' : ''}${m.producto} <span class="t-secondary">${m.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span></span>
+                    <strong>${m.monto.toFixed(2)} Bs</strong>
+                  </div>`;
+                  if (m.tipo === 'gasto') return `
+                  <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="t-body">${m.motivo} <span class="badge badge-danger">Gasto</span></span>
+                    <strong style="color:var(--danger);">−${m.monto.toFixed(2)} Bs</strong>
+                  </div>`;
+                  if (m.tipo === 'retiro') return `
+                  <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="t-body">Caja retirada <span class="t-secondary">Efectivo ${m.efectivo.toFixed(2)} + QR ${m.qr.toFixed(2)}</span></span>
+                    <strong>${m.total.toFixed(2)} Bs</strong>
+                  </div>`;
+                  return `
+                  <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="t-body">${m.producto} <span class="t-secondary">${m.motivo}${m.compartida ? ' · Baja por ' + (m.realizadoPor === 'pizzeria' ? 'Pizzería' : 'Salteñería') : ''}</span> <span class="badge badge-warning">Baja</span></span>
+                    <strong>−${m.cantidad} und.</strong>
+                  </div>`;
+                }).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `; }).join('')}
+      </div>
+      <div class="bottom-nav">
+        <button data-nav="inicio"><span class="ic">${ic('home')}</span>Inicio</button>
+        <button data-nav="stock"><span class="ic">${ic('box')}</span>Stock</button>
+        <button class="active"><span class="ic">${ic('clock')}</span>Historial</button>
+        <button data-nav="caja"><span class="ic">${ic('wallet')}</span>Caja</button>
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = () => pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.querySelectorAll('#toggle-filtro button').forEach(b => {
+      b.onclick = () => { filtro = b.dataset.f; render(); };
+    });
+    document.querySelectorAll('[data-dia]').forEach(el => {
+      el.onclick = () => { diaAbierto = diaAbierto === el.dataset.dia ? null : el.dataset.dia; render(); };
+    });
+    document.querySelectorAll('[data-nav]').forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.nav === 'inicio') pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
+        else if (b.dataset.nav === 'stock') pantallaStock().catch(e => mostrarError('abrir stock', e));
+        else if (b.dataset.nav === 'caja') pantallaCaja().catch(e => mostrarError('abrir caja', e));
+      };
+    });
+    document.querySelectorAll('[data-proximamente]').forEach(b => {
+      b.onclick = () => alert(b.dataset.proximamente + ': próximamente en esta base visual.');
+    });
+  }
+  render();
+}
+
+// ============================================================
+// 9d) PANTALLA: Caja (del turno/compartimento, día de hoy)
+// ============================================================
+async function pantallaCaja() {
+  app.innerHTML = `<div class="empty-state">Cargando caja…</div>`;
+  const nombreComp = compartimentoActual === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+  const compRef = db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual);
+  const gastosRef = compRef.collection('gastos');
+
+  let cajaEfectivo, cajaTotal, gastosHoy, gastosMes;
+  try {
+    const hoy = hoyISO();
+    const snapComp = await conTiempoLimite(compRef.get(), 15000, 'cargar caja');
+    const d = snapComp.exists ? snapComp.data() : {};
+
+    if (!d.cajaInicializada) {
+      // Primera vez: recalcular la caja desde TODO el historial real (ventas de antes
+      // de que existiera esta caja acumulada no se habían contado).
+      const [snapVentas, snapGastos] = await conTiempoLimite(Promise.all([
+        compRef.collection('ventas').get(),
+        compRef.collection('gastos').get()
+      ]), 20000, 'recalcular caja');
+      let efectivo = 0, total = 0;
+      snapVentas.forEach(doc => {
+        const v = doc.data();
+        total += v.monto;
+        if (v.formaPago === 'efectivo') efectivo += v.monto;
+      });
+      let gastosTotal = 0;
+      snapGastos.forEach(doc => { gastosTotal += doc.data().monto; });
+      efectivo = Math.max(0, efectivo - gastosTotal);
+      total = Math.max(0, total - gastosTotal);
+      await compRef.set({ cajaEfectivo: efectivo, cajaTotal: total, cajaInicializada: true }, { merge: true });
+      cajaEfectivo = efectivo;
+      cajaTotal = total;
+    } else {
+      cajaEfectivo = d.cajaEfectivo || 0;
+      cajaTotal = d.cajaTotal || 0;
+    }
+
+    const primerDiaMes = hoy.slice(0, 7) + '-01'; // YYYY-MM-01
+    const [snapG, snapGMes] = await conTiempoLimite(Promise.all([
+      gastosRef.where('fecha', '==', hoy).get(),
+      gastosRef.where('fecha', '>=', primerDiaMes).get()
+    ]), 15000, 'cargar gastos');
+    gastosHoy = snapG.docs.map(doc => doc.data());
+    gastosMes = snapGMes.docs.reduce((a, doc) => a + doc.data().monto, 0);
+  } catch (e) {
+    return mostrarError('cargar caja', e);
+  }
+
+  function render() {
+    const cajaQr = Math.max(0, cajaTotal - cajaEfectivo);
+
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Caja · ${nombreComp}</div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <div class="card center">
+          <div class="t-price" style="font-size:2rem;">${cajaTotal.toFixed(2)} Bs</div>
+          <div class="t-secondary">Caja total (efectivo + QR, acumulado)</div>
+          <button class="btn btn-danger" id="btn-retirar" style="margin-top:10px;" ${cajaTotal <= 0 ? 'disabled' : ''}>Retirar caja</button>
+          <div class="t-secondary" style="margin-top:6px;font-size:0.72rem;">Esta caja se acumula hasta que la dueña la retira.</div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="valor">${cajaEfectivo.toFixed(0)} Bs</div><div class="lbl">${ic('cash',13)} Caja efectivo</div></div>
+          <div class="stat-box"><div class="valor">${cajaQr.toFixed(0)} Bs</div><div class="lbl">${ic('phone',13)} Caja QR</div></div>
+        </div>
+
+        <button class="btn btn-secondary" id="btn-mostrar-gasto">+ Registrar gasto</button>
+        <div class="card" id="form-gasto" style="display:none;">
+          <div class="field"><label>¿En qué se gastó?</label><input type="text" id="in-motivo" placeholder="Ej: movilidad, insumos"></div>
+          <div class="field" style="margin-top:10px;"><label>Monto en Bs</label><input type="number" id="in-monto-gasto" inputmode="decimal" placeholder="0.00"></div>
+          <button class="btn btn-primary" id="btn-agregar-gasto" style="margin-top:12px;">Agregar gasto</button>
+          <div class="error-text" id="gasto-error"></div>
+        </div>
+
+        <div class="row t-secondary" style="margin-top:var(--space-2);font-size:0.85rem;">
+          <span>Total de gastos este mes</span>
+          <strong style="color:var(--danger);">−${gastosMes.toFixed(2)} Bs</strong>
+        </div>
+        <div class="t-eyebrow" style="margin-top:var(--space-2);">Gastos de hoy (${gastosHoy.length})</div>
+        <div class="card-flat">
+          ${gastosHoy.length === 0 ? `<div class="t-secondary">Sin gastos registrados hoy.</div>` : gastosHoy.map(g => `
+            <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
+              <span class="t-body">${g.motivo}</span>
+              <strong style="color:var(--danger);">−${g.monto.toFixed(2)} Bs</strong>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <button data-nav="inicio"><span class="ic">${ic('home')}</span>Inicio</button>
+        <button data-nav="stock"><span class="ic">${ic('box')}</span>Stock</button>
+        <button data-nav="historial"><span class="ic">${ic('clock')}</span>Historial</button>
+        <button class="active"><span class="ic">${ic('wallet')}</span>Caja</button>
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = () => pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.getElementById('btn-retirar').onclick = async () => {
+      if (!confirm(`¿Retirar ${cajaTotal.toFixed(2)} Bs? La caja de este turno quedará en 0.`)) return;
+      try {
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(compRef);
+          const d = snap.exists ? snap.data() : {};
+          const efectivo = d.cajaEfectivo || 0;
+          const total = d.cajaTotal || 0;
+          tx.set(compRef.collection('retiros').doc(), {
+            efectivo, qr: Math.max(0, total - efectivo), total,
+            fecha: hoyISO(),
+            creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+            schemaVersion: 1
+          });
+          tx.set(compRef, { cajaEfectivo: 0, cajaTotal: 0 }, { merge: true });
+        });
+        await pantallaCaja();
+      } catch (e) {
+        alert('No se pudo registrar el retiro.');
+      }
+    };
+    document.getElementById('btn-mostrar-gasto').onclick = () => {
+      document.getElementById('form-gasto').style.display = 'block';
+      document.getElementById('btn-mostrar-gasto').style.display = 'none';
+    };
+    document.getElementById('btn-agregar-gasto').onclick = async () => {
+      const motivo = document.getElementById('in-motivo').value.trim();
+      const monto = parseFloat(document.getElementById('in-monto-gasto').value);
+      const errorEl = document.getElementById('gasto-error');
+      if (!motivo || isNaN(monto) || monto <= 0) {
+        errorEl.textContent = 'Completa el motivo y un monto válido';
+        return;
+      }
+      errorEl.textContent = 'Guardando…';
+      try {
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(compRef);
+          const d = snap.exists ? snap.data() : {};
+          const efectivoActual = d.cajaEfectivo || 0;
+          if (monto > efectivoActual + 0.01) throw new Error('SIN_EFECTIVO');
+          tx.set(gastosRef.doc(), {
+            motivo, monto,
+            fecha: hoyISO(),
+            creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+            schemaVersion: 1
+          });
+          tx.set(compRef, {
+            cajaEfectivo: firebase.firestore.FieldValue.increment(-monto),
+            cajaTotal: firebase.firestore.FieldValue.increment(-monto)
+          }, { merge: true });
+        });
+        await pantallaCaja();
+      } catch (e) {
+        errorEl.textContent = e.message === 'SIN_EFECTIVO'
+          ? 'No hay suficiente efectivo en caja para ese gasto.'
+          : 'No se pudo guardar el gasto.';
+      }
+    };
+    document.querySelectorAll('[data-nav]').forEach(b => {
+      b.onclick = () => {
+        if (b.dataset.nav === 'inicio') pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
+        else if (b.dataset.nav === 'stock') pantallaStock().catch(e => mostrarError('abrir stock', e));
+        else if (b.dataset.nav === 'historial') pantallaHistorial().catch(e => mostrarError('abrir historial', e));
+      };
+    });
+  }
+  render();
+}
+
+function formatearFecha(iso) {
+  const hoy = hoyISO();
+  const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1);
+  const ayer = ayerDate.toISOString().slice(0, 10);
+  if (iso === hoy) return 'Hoy';
+  if (iso === ayer) return 'Ayer';
+  const [a, m, d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+}
+
+// ============================================================
+// 10) Arranque
+// ============================================================
+function usuarioGuardado() {
+  return new Promise((resolve) => {
+    const cancelar = auth.onAuthStateChanged(user => { cancelar(); resolve(user); });
+  });
+}
+
+async function iniciar() {
+  try {
+    app.innerHTML = `<div class="empty-state">Conectando…</div>`;
+    // Si ya había una sesión guardada en este celular, no hace falta internet para seguir usándola.
+    const usuario = await conTiempoLimite(usuarioGuardado(), 8000, 'comprobar sesión guardada');
+    if (!usuario) {
+      await conTiempoLimite(auth.signInAnonymously(), 15000, 'iniciar sesión');
+    }
+    await conTiempoLimite(asegurarSucursalPrueba(), 15000, 'crear sucursal de prueba');
+    pantallaBienvenida();
+  } catch (e) {
+    const paso = (e && e.message && e.message.startsWith('TIMEOUT:'))
+      ? 'tardó demasiado en: ' + e.message.replace('TIMEOUT:', '')
+      : 'error inesperado';
+    mostrarError(paso, e);
+  }
+}
+
+iniciar();
+</script>
+</body>
+</html>
