@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Pizzería Salas · Panel de la dueña</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<style>
+/* ============================================================
+   DESIGN SYSTEM — Pizzería Salas / Salteñería Salas
+   El color de acento es un solo "hue" (0-360, el círculo cromático
+   completo) y el modo claro/oscuro es independiente. Cambiar --hue
+   o [data-theme] cambia TODA la app sin tocar nada más.
+   ============================================================ */
+:root{
+  --hue: 328; /* rosa por defecto */
+  --accent: hsl(var(--hue) 68% 42%);
+  --accent-hover: hsl(var(--hue) 68% 35%);
+  --accent-light: hsl(var(--hue) 60% 93%);
+  --bg: #faf8f8;
+  --surface: #ffffff;
+  --surface-2: hsl(var(--hue) 20% 96%);
+  --text-primary: #211d20;
+  --text-secondary: #7c7579;
+  --border: hsl(var(--hue) 16% 89%);
+  --success: #1f7a4d;
+  --warning: #a16a12;
+  --danger: #b23a2e;
+  --info: #336a9e;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 3px rgba(20,10,15,0.06);
+  --shadow-md: 0 4px 16px rgba(20,10,15,0.08);
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px;
+}
+[data-theme="dark"]{
+  --bg: hsl(var(--hue) 14% 9%);
+  --surface: hsl(var(--hue) 13% 13%);
+  --surface-2: hsl(var(--hue) 11% 17%);
+  --text-primary: #f1edef;
+  --text-secondary: #a79fa5;
+  --border: hsl(var(--hue) 10% 23%);
+  --accent: hsl(var(--hue) 48% 54%);
+  --accent-hover: hsl(var(--hue) 48% 60%);
+  --accent-light: hsl(var(--hue) 35% 22%);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text-primary);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+.screen{max-width:480px;margin:0 auto;min-height:100vh;padding:0 0 32px;display:flex;flex-direction:column;}
+
+.t-title{font-size:1.5rem;font-weight:700;margin:0 0 2px;letter-spacing:-0.01em;}
+.t-subtitle{font-size:1.05rem;font-weight:600;margin:0 0 2px;}
+.t-body{font-size:0.95rem;line-height:1.4;}
+.t-secondary{font-size:0.85rem;color:var(--text-secondary);}
+.t-price{font-size:1.6rem;font-weight:800;color:var(--accent);}
+.t-eyebrow{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-secondary);font-weight:700;}
+
+.px{padding-left:var(--space-4);padding-right:var(--space-4);}
+.stack > * + *{margin-top:var(--space-3);}
+.row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);}
+.center{display:flex;flex-direction:column;align-items:center;text-align:center;}
+.grow{flex:1;}
+
+.header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-4);}
+.header-btn{
+  width:38px;height:38px;border-radius:50%;border:1px solid var(--border);
+  background:var(--surface);display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;color:var(--text-primary);cursor:pointer;
+}
+
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:15px;border:none;border-radius:var(--radius-md);
+  font-size:1rem;font-weight:700;cursor:pointer;transition:transform .08s ease;
+}
+.btn:active{transform:scale(0.98);}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:var(--shadow-sm);}
+.btn-primary:disabled{opacity:0.45;}
+.btn-secondary{background:var(--accent-light);color:var(--accent);}
+.btn-tertiary{background:transparent;color:var(--text-secondary);}
+.btn-danger{background:#fde8e5;color:var(--danger);}
+
+.field{width:100%;}
+.field label{display:block;font-size:0.82rem;color:var(--text-secondary);margin-bottom:6px;font-weight:600;}
+.field input, .field select{
+  width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  font-size:0.98rem;background:var(--surface);color:var(--text-primary);
+}
+.field input:focus, .field select:focus{outline:none;border-color:var(--accent);}
+.search{position:relative;}
+.search input{padding-left:38px;}
+.search .icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-secondary);}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:var(--space-4);box-shadow:var(--shadow-sm);
+}
+.card-flat{background:var(--surface-2);border-radius:var(--radius-md);padding:var(--space-4);}
+
+.sucursal-item{
+  display:flex;align-items:center;gap:var(--space-3);
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-md);
+  padding:14px;margin-bottom:10px;cursor:pointer;
+}
+.sucursal-item .avatar{
+  width:42px;height:42px;border-radius:12px;background:var(--accent-light);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;
+}
+.sucursal-item .info{flex:1;min-width:0;}
+.sucursal-item .info .nombre{font-weight:700;font-size:0.98rem;}
+.sucursal-item .info .zona{font-size:0.8rem;color:var(--text-secondary);}
+.sucursal-item .arrow{color:var(--text-secondary);}
+
+.compartimento-card{
+  display:flex;align-items:center;gap:var(--space-3);width:100%;text-align:left;
+  background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius-lg);
+  padding:18px;cursor:pointer;
+}
+.compartimento-card .emoji{font-size:1.8rem;}
+.compartimento-card .info .nombre{font-weight:700;font-size:1.05rem;}
+.compartimento-card .info .turno{font-size:0.82rem;color:var(--text-secondary);}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:0.72rem;font-weight:700;}
+.badge-neutral{background:var(--surface-2);color:var(--text-secondary);}
+.badge-success{background:#e2f6ec;color:var(--success);}
+.badge-warning{background:#fdf1de;color:var(--warning);}
+.badge-danger{background:#fde8e5;color:var(--danger);}
+.badge-accent{background:var(--accent-light);color:var(--accent);}
+
+.alert{display:flex;align-items:flex-start;gap:10px;padding:13px 14px;border-radius:var(--radius-md);font-size:0.88rem;}
+.alert-info{background:var(--accent-light);color:var(--accent);}
+.alert-warning{background:#fdf1de;color:var(--warning);}
+.alert-danger{background:#fde8e5;color:var(--danger);}
+
+.pin-dots{display:flex;gap:14px;justify-content:center;margin:var(--space-6) 0;}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--accent);}
+.pin-dot.filled{background:var(--accent);}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 var(--space-4);}
+.keypad button{
+  aspect-ratio:1;border-radius:var(--radius-lg);border:1px solid var(--border);
+  background:var(--surface);font-size:1.4rem;font-weight:600;color:var(--text-primary);
+}
+.keypad button:active{background:var(--surface-2);}
+.keypad button.ok{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+.stat-row{display:flex;gap:10px;}
+.stat-box{flex:1;background:var(--surface-2);border-radius:var(--radius-md);padding:14px;text-align:center;}
+.stat-box .valor{font-size:1.3rem;font-weight:800;}
+.stat-box .lbl{font-size:0.75rem;color:var(--text-secondary);margin-top:2px;}
+
+.toggle{display:flex;gap:8px;}
+.toggle button{
+  flex:1;padding:11px;border-radius:var(--radius-sm);border:1.5px solid var(--border);
+  background:var(--surface);color:var(--text-primary);font-weight:700;font-size:0.9rem;
+}
+.toggle button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+.hue-strip{
+  height:44px;border-radius:22px;margin:var(--space-3) 0;position:relative;
+  background:linear-gradient(to right,
+    hsl(0 50% 45%), hsl(30 50% 45%), hsl(60 50% 42%), hsl(90 50% 40%),
+    hsl(120 45% 38%), hsl(150 45% 38%), hsl(180 42% 40%), hsl(210 48% 45%),
+    hsl(240 45% 48%), hsl(270 45% 45%), hsl(300 45% 42%), hsl(330 50% 42%), hsl(360 50% 45%));
+}
+.hue-strip input[type=range]{-webkit-appearance:none;width:100%;height:44px;background:transparent;margin:0;}
+.hue-strip input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;
+  border:3px solid var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.3);
+}
+.swatch-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:var(--space-3);}
+.swatch{width:100%;aspect-ratio:1;border-radius:50%;border:2px solid transparent;cursor:pointer;}
+.swatch.selected{border-color:var(--text-primary);}
+
+.empty-state{text-align:center;padding:var(--space-8) var(--space-4);color:var(--text-secondary);}
+.empty-state .icon{font-size:2.2rem;margin-bottom:8px;}
+.error-text{color:var(--danger);font-size:0.85rem;text-align:center;min-height:1.2em;}
+
+.logo-mark{
+  width:84px;height:84px;border-radius:24px;background:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:2.2rem;
+  box-shadow:var(--shadow-md);margin-bottom:var(--space-4);
+}
+
+/* --- Header enriquecido --- */
+.avatar-circle{
+  width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05rem;flex-shrink:0;
+}
+.header-rich{display:flex;align-items:center;gap:12px;padding:var(--space-4);}
+.bell-btn{position:relative;}
+.bell-dot{
+  position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;
+  background:var(--danger);border:2px solid var(--surface);
+}
+
+/* --- Botón de acceso rápido con icono --- */
+.quick-btn{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--surface-2);border:none;border-radius:var(--radius-md);
+  padding:14px 6px;font-size:0.78rem;font-weight:700;color:var(--text-primary);flex:1;
+}
+.quick-btn .ic{font-size:1.35rem;}
+
+/* --- Gráfico de ventas por hora --- */
+.chart-bars{display:flex;align-items:flex-end;gap:6px;height:90px;margin-top:var(--space-3);}
+.chart-bars .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+.chart-bars .bar{width:100%;max-width:22px;border-radius:6px 6px 2px 2px;background:var(--accent-light);transition:height .3s ease;}
+.chart-bars .bar.filled{background:var(--accent);}
+.chart-bars .bar-lbl{font-size:0.62rem;color:var(--text-secondary);margin-top:4px;}
+
+/* --- Navegación inferior fija (reutilizable) --- */
+.bottom-nav{
+  position:sticky;bottom:0;display:flex;background:var(--surface);
+  border-top:1px solid var(--border);padding:8px 4px calc(8px + env(safe-area-inset-bottom,0px));
+  margin-top:auto;
+}
+.bottom-nav button{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+  background:none;border:none;color:var(--text-secondary);font-size:0.66rem;font-weight:700;padding:4px;
+}
+.bottom-nav button .ic{font-size:1.3rem;}
+.bottom-nav button.active{color:var(--accent);}
+</style>
+</head>
+<body>
+
+<div id="app" class="screen">Cargando…</div>
+
+<script>
+// ============================================================
+// 1) TEMA — hue (0-360) + modo claro/oscuro, guardado por dispositivo
+// ============================================================
+function cargarTema() {
+  const hue = localStorage.getItem('salas_admin_hue');
+  const modo = localStorage.getItem('salas_admin_modo');
+  if (hue) document.documentElement.style.setProperty('--hue', hue);
+  if (modo === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+}
+function aplicarHue(hue) {
+  document.documentElement.style.setProperty('--hue', hue);
+  localStorage.setItem('salas_admin_hue', hue);
+}
+function aplicarModo(modo) {
+  if (modo === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  localStorage.setItem('salas_admin_modo', modo);
+}
+cargarTema();
+
+// ============================================================
+// 2) Conexión a Firebase (proyecto real: salas-94cef) — SIN CAMBIOS
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDBH5au_DZDSUItcZtMuFXHIW_2mEJEG3o",
+  authDomain: "salas-94cef.firebaseapp.com",
+  projectId: "salas-94cef",
+  storageBucket: "salas-94cef.firebasestorage.app",
+  messagingSenderId: "537826891275",
+  appId: "1:537826891275:web:f8ad974c16f973fbf3d90e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('No se pudo activar persistencia offline:', err.code);
+});
+
+const ICONOS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>',
+  cart: '<circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M3 4h2l2.2 11.2a1.8 1.8 0 0 0 1.8 1.5h8a1.8 1.8 0 0 0 1.8-1.4L21 8H6"/>',
+  box: '<path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5Z"/><path d="M3 8.5 12 13l9-4.5"/><path d="M12 13v7"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 2"/>',
+  wallet: '<rect x="3" y="6" width="18" height="13" rx="2.2"/><path d="M3 10h18"/><circle cx="16.5" cy="14" r="1.1"/>',
+  palette: '<circle cx="12" cy="12" r="9"/><circle cx="8.2" cy="10" r="1.1"/><circle cx="12" cy="8" r="1.1"/><circle cx="15.8" cy="10" r="1.1"/><circle cx="9" cy="15" r="1.1"/><path d="M12 21a2 2 0 0 1-2-2c0-1.1.9-1.4.9-2.3A1 1 0 0 0 10 16h-.2A9 9 0 1 1 21 12c0 1.8-1.2 2.3-2.6 2.3h-1.2a1.4 1.4 0 0 0-1.2 2.2c.3.5.6.9.6 1.5a2 2 0 0 1-2 2Z" fill="none"/>',
+  logout: '<path d="M9 20H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4"/><path d="M15 16l4-4-4-4"/><path d="M19 12H9"/>',
+  back: '<path d="M15 5 8 12l7 7"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/>',
+  camera: '<path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.5" r="3.3"/>',
+  paperclip: '<path d="M8 12.5V8a4 4 0 0 1 8 0v9a2.5 2.5 0 0 1-5 0V9"/>',
+  check: '<path d="M4.5 12.5 9 17l10.5-11"/>',
+  pizza: '<path d="M12 3.5 4 20h16L12 3.5Z"/><circle cx="12" cy="13" r="1"/><circle cx="10" cy="16.5" r="1"/><circle cx="14" cy="16.5" r="1"/>',
+  empanada: '<path d="M4 12a8 8 0 0 1 16 0c0 4-3 7-8 9-5-2-8-5-8-9Z"/><path d="M8 12q4-2 8 0" fill="none"/>',
+  drink: '<path d="M7 3h10l-1 15.5a2 2 0 0 1-2 1.8h-4a2 2 0 0 1-2-1.8L7 3Z"/><path d="M6.3 7h11.4"/>',
+  store: '<path d="M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9"/><path d="M3 10l1.5-5h15L21 10"/><path d="M9 20v-6h6v6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M4.2 12H2M22 12h-2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/>',
+  cash: '<rect x="2.3" y="6.5" width="19.4" height="11" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M5.3 9v.01M18.7 15v.01"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.3h2"/>',
+  coffee: '<path d="M4 9h13v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9Z"/><path d="M17 10h1.4a2.4 2.4 0 0 1 0 4.8H17"/><path d="M8 2.8c0 .9-1 1-1 1.9s1 1 1 1.9M12 2.8c0 .9-1 1-1 1.9s1 1 1 1.9"/>',
+  backspace: '<path d="M8.5 6h11a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19.5 18h-11L3 12l5.5-6Z"/><path d="M11 10l4.5 4M15.5 10 11 14"/>'
+};
+function ic(nombre, size) {
+  size = size || 20;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONOS[nombre] || ''}</svg>`;
+}
+
+function slug(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+}
+function itemsStockPizza() {
+  const items = [];
+  TAMANOS_PIZZA.forEach(t => {
+    if (SABORES_PIZZA[t].length === 0) items.push(t);
+    else SABORES_PIZZA[t].forEach(s => items.push(`${t} ${s}`));
+  });
+  return items; // nombres cortos, sin el prefijo "Pizza"
+}
+
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function conTiempoLimite(promesa, ms, etiqueta) {
+  return Promise.race([
+    promesa,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT:' + etiqueta)), ms))
+  ]);
+}
+
+function mostrarError(paso, e) {
+  const detalle = (e && (e.code || e.message)) ? (e.code || '') + ' ' + (e.message || e) : String(e);
+  app.innerHTML = `
+    <div class="px stack" style="padding-top:60px;">
+      <div class="t-title">No se pudo conectar</div>
+      <div class="t-secondary">Se quedó atascado en: <b>${paso}</b></div>
+      <div class="card"><div class="error-text" style="text-align:left;">${detalle}</div></div>
+      <button class="btn btn-primary" id="btn-reintentar">Reintentar</button>
+    </div>
+  `;
+  document.getElementById('btn-reintentar').onclick = iniciar;
+}
+
+// ============================================================
+// 4) PANTALLA: Selector de tema (accesible desde el header)
+// ============================================================
+function abrirSelectorTema(pantallaAnterior) {
+  const hueActual = getComputedStyle(document.documentElement).getPropertyValue('--hue').trim() || 328;
+  const modoActual = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const preset = [15, 340, 328, 300, 265, 230, 200, 170, 140, 95, 55, 30];
+
+  app.innerHTML = `
+    <div class="header">
+      <button class="header-btn" id="btn-cerrar">${ic('back')}</button>
+      <div class="t-subtitle">Elige tu color</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="px stack">
+      <div class="t-secondary">Desliza para elegir cualquier color del círculo cromático, o toca uno de los sugeridos.</div>
+      <div class="hue-strip">
+        <input type="range" min="0" max="360" value="${hueActual}" id="hue-slider">
+      </div>
+      <div class="swatch-grid" id="swatch-grid">
+        ${preset.map(h => `<div class="swatch ${String(h)===String(hueActual)?'selected':''}" data-hue="${h}" style="background:hsl(${h} 52% 40%)"></div>`).join('')}
+      </div>
+      <div class="t-eyebrow" style="margin-top:var(--space-5);">Apariencia</div>
+      <div class="toggle">
+        <button data-modo="light" class="${modoActual==='light'?'active':''}">${ic('sun',18)} Claro</button>
+        <button data-modo="dark" class="${modoActual==='dark'?'active':''}">${ic('moon',18)} Oscuro</button>
+      </div>
+      <div class="card" style="margin-top:var(--space-5);">
+        <div class="t-eyebrow">Vista previa</div>
+        <div class="row" style="margin-top:8px;">
+          <span class="badge badge-accent">Activo</span>
+          <span class="badge badge-success">Normal</span>
+          <span class="badge badge-warning">Bajo</span>
+        </div>
+        <button class="btn btn-primary" style="margin-top:12px;">Botón principal</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('btn-cerrar').onclick = pantallaAnterior;
+  document.getElementById('hue-slider').oninput = (e) => aplicarHue(e.target.value);
+  document.querySelectorAll('#swatch-grid .swatch').forEach(s => {
+    s.onclick = () => { aplicarHue(s.dataset.hue); abrirSelectorTema(pantallaAnterior); };
+  });
+  document.querySelectorAll('.toggle button').forEach(b => {
+    b.onclick = () => { aplicarModo(b.dataset.modo); abrirSelectorTema(pantallaAnterior); };
+  });
+}
+
+// ============================================================
+// 6) PANTALLA: Panel principal (todas las sucursales)
+// ============================================================
+const app = document.getElementById('app');
+
+// --- Catálogo (igual que en index.html, para poder poner precio a cada producto) ---
+const TAMANOS_PIZZA = ['Grande', 'Mediana', 'Pequeña', 'Escolar', 'Cono Pizza'];
+const SABORES_PIZZA = {
+  'Grande': ['Carnívora', 'Tradicional', 'Mixta', 'Hawaiana'],
+  'Mediana': ['Carnívora', 'Tradicional', 'Mixta', 'Hawaiana'],
+  'Pequeña': ['Carnívora', 'Tradicional', 'Mixta', 'Hawaiana'],
+  'Escolar': ['Tradicional', 'Mixta', 'Hawaiana'],
+  'Cono Pizza': []
+};
+const TAMANOS_REFRESCO = ['Personal', 'Cascada', 'Popular'];
+const TAMANOS_CAJA = ['Grande', 'Mediana'];
+
+function ayerISO() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
+
+function productosDe(compartimento, s) {
+  const lista = [];
+  if (compartimento === 'pizzeria') {
+    TAMANOS_PIZZA.forEach(t => {
+      if (SABORES_PIZZA[t].length === 0) lista.push(`Pizza ${t}`);
+      else SABORES_PIZZA[t].forEach(sb => lista.push(`Pizza ${t} ${sb}`));
+    });
+    lista.push('Café', 'Té');
+    if (s.tieneCajasPizza) TAMANOS_CAJA.forEach(t => lista.push(`Caja ${t}`));
+  } else {
+    lista.push('Salteña mixta', 'Café', 'Té');
+  }
+  TAMANOS_REFRESCO.forEach(t => lista.push(`Refresco ${t}`));
+  return lista;
+}
+
+async function cargarSucursalesConCaja() {
+  const snap = await conTiempoLimite(db.collection('sucursales').where('activo', '==', true).get(), 15000, 'cargar sucursales');
+  const sucursales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  sucursales.sort((a, b) => (a.orden || 99) - (b.orden || 99));
+  // Para cada sucursal, traemos la caja acumulada de sus compartimentos
+  await Promise.all(sucursales.map(async (s) => {
+    const comps = ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || s.tieneSalteneria);
+    const [docs, stockSnaps, refrescosSnap] = await Promise.all([
+      Promise.all(comps.map(c => db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).get())),
+      Promise.all(comps.map(c => db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).collection('stock').get())),
+      db.collection('sucursales').doc(s.id).collection('stockRefrescos').get()
+    ]);
+    s._cajaTotal = docs.reduce((a, d) => a + (d.exists ? (d.data().cajaTotal || 0) : 0), 0);
+    let agotados = 0;
+    stockSnaps.forEach(snapStock => snapStock.forEach(doc => { if ((doc.data().cantidad || 0) <= 0) agotados++; }));
+    refrescosSnap.forEach(doc => { if ((doc.data().cantidad || 0) <= 0) agotados++; });
+    s._stockBajo = agotados;
+  }));
+  return sucursales;
+}
+
+async function pantallaPanel() {
+  app.innerHTML = `<div class="empty-state">Cargando sucursales…</div>`;
+  let sucursales;
+  try {
+    sucursales = await cargarSucursalesConCaja();
+  } catch (e) {
+    return mostrarError('cargar el panel', e);
+  }
+
+  function render() {
+    const totalGeneral = sucursales.reduce((a, s) => a + s._cajaTotal, 0);
+    const totalAgotados = sucursales.reduce((a, s) => a + s._stockBajo, 0);
+    app.innerHTML = `
+      <div class="header">
+        <div>
+          <div class="t-title" style="font-size:1.2rem;">Panel de control</div>
+          <div class="t-secondary">PIZZERÍA SALAS · SALTEÑERÍA SALAS</div>
+        </div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <div class="card center">
+          <div class="t-price" style="font-size:1.9rem;">${totalGeneral.toFixed(2)} Bs</div>
+          <div class="t-secondary">Caja total de todas las sucursales (sin retirar)</div>
+        </div>
+
+        <div class="stat-row">
+          <button class="btn btn-secondary" id="btn-ir-reportes">${ic('cart',16)} Reportes</button>
+          ${totalAgotados > 0 ? `<div class="badge badge-warning" style="padding:10px 14px;flex:1;justify-content:center;">${totalAgotados} producto(s) agotados en total</div>` : ''}
+        </div>
+
+        <button class="btn btn-primary" id="btn-agregar-sucursal">+ Agregar sucursal</button>
+
+        <div class="t-eyebrow" style="margin-top:var(--space-2);">Sucursales (${sucursales.length})</div>
+        ${sucursales.length === 0 ? `<div class="empty-state">${ic('store',32)}<div>Todavía no hay sucursales.</div></div>` : sucursales.map((s, i) => `
+          <div class="sucursal-item" data-id="${s.id}">
+            <div class="avatar">${ic('store',20)}</div>
+            <div class="info">
+              <div class="nombre">Sucursal ${s.orden || i + 1} · ${s.nombre}</div>
+              <div class="zona">${s.zona || 'Sucursal'} · Caja: ${s._cajaTotal.toFixed(2)} Bs${s._stockBajo > 0 ? ` · ${s._stockBajo} agotado(s)` : ''}</div>
+            </div>
+            <div class="arrow">›</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.getElementById('btn-agregar-sucursal').onclick = () => pantallaAgregarSucursal(pantallaPanel);
+    document.getElementById('btn-ir-reportes').onclick = () => pantallaReportes(sucursales);
+    document.querySelectorAll('.sucursal-item').forEach(el => {
+      el.onclick = () => {
+        const s = sucursales.find(x => x.id === el.dataset.id);
+        pantallaDetalleSucursal(s);
+      };
+    });
+  }
+  render();
+}
+
+// ============================================================
+// 7) PANTALLA: Agregar sucursal
+// ============================================================
+function pantallaAgregarSucursal(volver) {
+  app.innerHTML = `
+    <div class="header">
+      <button class="header-btn" id="btn-atras">${ic('back')}</button>
+      <div class="t-subtitle">Nueva sucursal</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="px stack">
+      <div class="field"><label>Nombre de la sucursal</label><input type="text" id="in-nombre" placeholder="Ej: 21 de Diciembre"></div>
+      <div class="field"><label>Zona o ubicación (opcional)</label><input type="text" id="in-zona" placeholder="Ej: Zona Norte"></div>
+      <div class="field"><label>Orden (número para la lista)</label><input type="number" id="in-orden" placeholder="Ej: 2"></div>
+
+      <div class="card">
+        <div class="row"><span class="t-body">¿Tiene Salteñería?</span>
+          <div class="toggle" id="toggle-saltena" style="width:140px;">
+            <button class="active" data-v="si">Sí</button>
+            <button data-v="no">No</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><span class="t-body">¿Vende cajas de pizza?</span>
+          <div class="toggle" id="toggle-cajas" style="width:140px;">
+            <button class="active" data-v="si">Sí</button>
+            <button data-v="no">No</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="field"><label>PIN del empleado de Pizzería (4 dígitos)</label><input type="text" id="in-pin-pizzeria" inputmode="numeric" maxlength="4" placeholder="Ej: 1234"></div>
+      <div class="field" id="campo-pin-saltena"><label>PIN del empleado de Salteñería (4 dígitos)</label><input type="text" id="in-pin-saltena" inputmode="numeric" maxlength="4" placeholder="Ej: 5678"></div>
+
+      <button class="btn btn-primary" id="btn-guardar-sucursal">Crear sucursal</button>
+      <div class="error-text" id="sucursal-error"></div>
+    </div>
+  `;
+  document.getElementById('btn-atras').onclick = volver;
+
+  let tieneSaltena = true;
+  document.querySelectorAll('#toggle-saltena button').forEach(b => {
+    b.onclick = () => {
+      tieneSaltena = b.dataset.v === 'si';
+      document.querySelectorAll('#toggle-saltena button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      document.getElementById('campo-pin-saltena').style.display = tieneSaltena ? 'block' : 'none';
+    };
+  });
+  let tieneCajas = true;
+  document.querySelectorAll('#toggle-cajas button').forEach(b => {
+    b.onclick = () => {
+      tieneCajas = b.dataset.v === 'si';
+      document.querySelectorAll('#toggle-cajas button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    };
+  });
+
+  document.getElementById('btn-guardar-sucursal').onclick = async () => {
+    const nombre = document.getElementById('in-nombre').value.trim();
+    const zona = document.getElementById('in-zona').value.trim();
+    const orden = parseInt(document.getElementById('in-orden').value) || 99;
+    const pinPizzeria = document.getElementById('in-pin-pizzeria').value.trim();
+    const pinSaltena = document.getElementById('in-pin-saltena').value.trim();
+    const errorEl = document.getElementById('sucursal-error');
+
+    if (!nombre) { errorEl.textContent = 'Ponle un nombre a la sucursal.'; return; }
+    if (!/^\d{4}$/.test(pinPizzeria)) { errorEl.textContent = 'El PIN de Pizzería debe tener 4 dígitos.'; return; }
+    if (tieneSaltena && !/^\d{4}$/.test(pinSaltena)) { errorEl.textContent = 'El PIN de Salteñería debe tener 4 dígitos.'; return; }
+
+    errorEl.textContent = 'Guardando…';
+    try {
+      const compartimentos = {
+        pizzeria: { empleadoNombre: 'Empleado Pizzería', pin: pinPizzeria }
+      };
+      if (tieneSaltena) compartimentos.salteneria = { empleadoNombre: 'Empleado Salteñería', pin: pinSaltena };
+
+      await db.collection('sucursales').doc().set({
+        nombre, zona, orden,
+        activo: true,
+        tieneSalteneria: tieneSaltena,
+        tieneCajasPizza: tieneCajas,
+        compartimentos,
+        schemaVersion: 1
+      });
+      volver();
+    } catch (e) {
+      errorEl.textContent = 'No se pudo guardar la sucursal.';
+    }
+  };
+}
+
+// ============================================================
+// 8) PANTALLA: Detalle de una sucursal
+// ============================================================
+async function pantallaDetalleSucursal(s) {
+  app.innerHTML = `<div class="empty-state">Cargando ${s.nombre}…</div>`;
+  const comps = ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || s.tieneSalteneria);
+  let detalle;
+  try {
+    const docs = await conTiempoLimite(Promise.all(comps.map(c =>
+      db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).get()
+    )), 15000, 'cargar detalle de la sucursal');
+    detalle = comps.map((c, i) => ({
+      compartimento: c,
+      cajaEfectivo: docs[i].exists ? (docs[i].data().cajaEfectivo || 0) : 0,
+      cajaTotal: docs[i].exists ? (docs[i].data().cajaTotal || 0) : 0
+    }));
+  } catch (e) {
+    return mostrarError('cargar el detalle de la sucursal', e);
+  }
+
+  function render() {
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">${s.nombre}</div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <div class="t-secondary">${s.zona || 'Sucursal'}</div>
+        ${detalle.map(d => {
+          const comp = (s.compartimentos && s.compartimentos[d.compartimento]) || {};
+          return `
+          <div class="card">
+            <div class="row">
+              <div class="t-subtitle">${d.compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería'}</div>
+              <span class="t-secondary">${comp.empleadoNombre || 'Sin empleado'}</span>
+            </div>
+            <div class="stat-row" style="margin-top:8px;">
+              <div class="stat-box"><div class="valor">${d.cajaEfectivo.toFixed(0)} Bs</div><div class="lbl">${ic('cash',13)} Efectivo</div></div>
+              <div class="stat-box"><div class="valor">${(d.cajaTotal - d.cajaEfectivo).toFixed(0)} Bs</div><div class="lbl">${ic('phone',13)} QR</div></div>
+              <div class="stat-box"><div class="valor">${d.cajaTotal.toFixed(0)} Bs</div><div class="lbl">Total</div></div>
+            </div>
+            <div class="stat-row" style="margin-top:10px;">
+              <button class="btn btn-secondary" data-editar="${d.compartimento}">Editar precios</button>
+              <button class="btn btn-secondary" data-empleado="${d.compartimento}">Editar empleado</button>
+            </div>
+          </div>
+        `; }).join('')}
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = () => pantallaPanel();
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.querySelectorAll('[data-editar]').forEach(b => {
+      b.onclick = () => pantallaEditarPrecios(s, b.dataset.editar, () => pantallaDetalleSucursal(s));
+    });
+    document.querySelectorAll('[data-empleado]').forEach(b => {
+      b.onclick = () => pantallaEditarEmpleado(s, b.dataset.empleado, () => pantallaDetalleSucursal(s));
+    });
+  }
+  render();
+}
+
+// ============================================================
+// 8c) PANTALLA: Editar nombre y PIN del empleado
+// ============================================================
+function pantallaEditarEmpleado(s, compartimento, volver) {
+  const comp = (s.compartimentos && s.compartimentos[compartimento]) || {};
+  const nombreComp = compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+  app.innerHTML = `
+    <div class="header">
+      <button class="header-btn" id="btn-atras">${ic('back')}</button>
+      <div class="t-subtitle">Empleado · ${nombreComp}</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="px stack">
+      <div class="t-secondary">${s.nombre}</div>
+      <div class="field"><label>Nombre del empleado</label><input type="text" id="in-nombre-emp" value="${comp.empleadoNombre || ''}"></div>
+      <div class="field"><label>PIN (4 dígitos)</label><input type="text" id="in-pin-emp" inputmode="numeric" maxlength="4" value="${comp.pin || ''}"></div>
+      <button class="btn btn-primary" id="btn-guardar-empleado">Guardar</button>
+      <div class="error-text" id="empleado-error"></div>
+    </div>
+  `;
+  document.getElementById('btn-atras').onclick = volver;
+  document.getElementById('btn-guardar-empleado').onclick = async () => {
+    const nombre = document.getElementById('in-nombre-emp').value.trim();
+    const pin = document.getElementById('in-pin-emp').value.trim();
+    const errorEl = document.getElementById('empleado-error');
+    if (!nombre) { errorEl.textContent = 'Ponle un nombre al empleado.'; return; }
+    if (!/^\d{4}$/.test(pin)) { errorEl.textContent = 'El PIN debe tener 4 dígitos.'; return; }
+    errorEl.textContent = 'Guardando…';
+    try {
+      await db.collection('sucursales').doc(s.id).update({
+        [`compartimentos.${compartimento}.empleadoNombre`]: nombre,
+        [`compartimentos.${compartimento}.pin`]: pin
+      });
+      s.compartimentos[compartimento] = { ...comp, empleadoNombre: nombre, pin };
+      volver();
+    } catch (e) {
+      errorEl.textContent = 'No se pudo guardar.';
+    }
+  };
+}
+
+// ============================================================
+// 8b) PANTALLA: Editar precios de un compartimento
+// ============================================================
+async function pantallaEditarPrecios(s, compartimento, volver) {
+  app.innerHTML = `<div class="empty-state">Cargando precios…</div>`;
+  const compRef = db.collection('sucursales').doc(s.id).collection('compartimentos').doc(compartimento);
+  let precios;
+  try {
+    const snap = await conTiempoLimite(compRef.get(), 15000, 'cargar precios');
+    precios = snap.exists ? (snap.data().precios || {}) : {};
+  } catch (e) {
+    return mostrarError('cargar precios', e);
+  }
+
+  const productos = productosDe(compartimento, s);
+  const nombreComp = compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+
+  app.innerHTML = `
+    <div class="header">
+      <button class="header-btn" id="btn-atras">${ic('back')}</button>
+      <div class="t-subtitle">Precios · ${nombreComp}</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="px stack">
+      <div class="t-secondary">${s.nombre} — deja en blanco lo que aún no quieras fijar.</div>
+      <div class="card-flat">
+        ${productos.map(p => `
+          <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <span class="t-body">${p}</span>
+            <input type="number" inputmode="decimal" data-precio="${p}" value="${precios[p] != null ? precios[p] : ''}"
+              style="width:84px;text-align:right;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);">
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-primary" id="btn-guardar-precios">Guardar precios</button>
+      <div class="error-text" id="precios-error"></div>
+    </div>
+  `;
+  document.getElementById('btn-atras').onclick = volver;
+  document.getElementById('btn-guardar-precios').onclick = async () => {
+    const errorEl = document.getElementById('precios-error');
+    const nuevosPrecios = {};
+    document.querySelectorAll('[data-precio]').forEach(input => {
+      const v = parseFloat(input.value);
+      if (!isNaN(v) && v > 0) nuevosPrecios[input.dataset.precio] = v;
+    });
+    errorEl.textContent = 'Guardando…';
+    try {
+      await compRef.set({ precios: nuevosPrecios }, { merge: true });
+      volver();
+    } catch (e) {
+      errorEl.textContent = 'No se pudo guardar.';
+    }
+  };
+}
+
+// ============================================================
+// 8d) PANTALLA: Reportes (hoy vs. ayer, consolidado y por sucursal)
+// ============================================================
+async function pantallaReportes(sucursales) {
+  app.innerHTML = `<div class="empty-state">Calculando reportes…</div>`;
+  const hoy = hoyISO(), ayer = ayerISO();
+
+  async function totalVentasDia(sucursalId, comps, fecha) {
+    const snaps = await Promise.all(comps.map(c =>
+      db.collection('sucursales').doc(sucursalId).collection('compartimentos').doc(c)
+        .collection('ventas').where('fecha', '==', fecha).get()
+    ));
+    let total = 0;
+    snaps.forEach(s => s.forEach(doc => total += doc.data().monto));
+    return total;
+  }
+  async function totalGastosDia(sucursalId, comps, fecha) {
+    const snaps = await Promise.all(comps.map(c =>
+      db.collection('sucursales').doc(sucursalId).collection('compartimentos').doc(c)
+        .collection('gastos').where('fecha', '==', fecha).get()
+    ));
+    let total = 0;
+    snaps.forEach(s => s.forEach(doc => total += doc.data().monto));
+    return total;
+  }
+
+  let filas;
+  try {
+    filas = await conTiempoLimite(Promise.all(sucursales.map(async (s) => {
+      const comps = ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || s.tieneSalteneria);
+      const [ventasHoy, ventasAyer, gastosHoy] = await Promise.all([
+        totalVentasDia(s.id, comps, hoy),
+        totalVentasDia(s.id, comps, ayer),
+        totalGastosDia(s.id, comps, hoy)
+      ]);
+      const variacion = ventasAyer > 0 ? ((ventasHoy - ventasAyer) / ventasAyer) * 100 : (ventasHoy > 0 ? 100 : 0);
+      return { sucursal: s, ventasHoy, ventasAyer, gastosHoy, variacion };
+    })), 25000, 'calcular reportes');
+  } catch (e) {
+    return mostrarError('calcular reportes', e);
+  }
+
+  const totalHoy = filas.reduce((a, f) => a + f.ventasHoy, 0);
+  const totalAyer = filas.reduce((a, f) => a + f.ventasAyer, 0);
+  const totalGastosHoy = filas.reduce((a, f) => a + f.gastosHoy, 0);
+  const variacionTotal = totalAyer > 0 ? ((totalHoy - totalAyer) / totalAyer) * 100 : (totalHoy > 0 ? 100 : 0);
+
+  function render() {
+    app.innerHTML = `
+      <div class="header">
+        <button class="header-btn" id="btn-atras">${ic('back')}</button>
+        <div class="t-subtitle">Reportes</div>
+        <button class="header-btn" id="btn-tema">${ic('palette')}</button>
+      </div>
+      <div class="px stack">
+        <div class="card center">
+          <div class="t-price" style="font-size:1.9rem;">${totalHoy.toFixed(2)} Bs</div>
+          <div class="t-secondary">Ventas de hoy (todas las sucursales)</div>
+          <span class="badge ${variacionTotal >= 0 ? 'badge-success' : 'badge-danger'}" style="margin-top:6px;">
+            ${variacionTotal >= 0 ? '+' : ''}${variacionTotal.toFixed(0)}% vs. ayer
+          </span>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box"><div class="valor">${totalGastosHoy.toFixed(0)} Bs</div><div class="lbl">Gastos hoy</div></div>
+          <div class="stat-box"><div class="valor">${(totalHoy - totalGastosHoy).toFixed(0)} Bs</div><div class="lbl">Ganancia hoy</div></div>
+        </div>
+
+        <div class="t-eyebrow" style="margin-top:var(--space-2);">Por sucursal</div>
+        ${filas.map(f => `
+          <div class="card-flat" style="margin-bottom:8px;">
+            <div class="row">
+              <span class="t-body">${f.sucursal.nombre}</span>
+              <span class="badge ${f.variacion >= 0 ? 'badge-success' : 'badge-danger'}">${f.variacion >= 0 ? '+' : ''}${f.variacion.toFixed(0)}%</span>
+            </div>
+            <div class="t-secondary" style="margin-top:4px;">Hoy: ${f.ventasHoy.toFixed(2)} Bs · Ayer: ${f.ventasAyer.toFixed(2)} Bs</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    document.getElementById('btn-atras').onclick = () => pantallaPanel();
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+  }
+  render();
+}
+
+// ============================================================
+// 9) Arranque
+// ============================================================
+async function iniciar() {
+  try {
+    app.innerHTML = `<div class="empty-state">Conectando…</div>`;
+    const usuario = await conTiempoLimite(usuarioGuardado(), 8000, 'comprobar sesión guardada');
+    if (!usuario) {
+      await conTiempoLimite(auth.signInAnonymously(), 15000, 'iniciar sesión');
+    }
+    await pantallaPanel();
+  } catch (e) {
+    const paso = (e && e.message && e.message.startsWith('TIMEOUT:'))
+      ? 'tardó demasiado en: ' + e.message.replace('TIMEOUT:', '')
+      : 'error inesperado';
+    mostrarError(paso, e);
+  }
+}
+
+function usuarioGuardado() {
+  return new Promise((resolve) => {
+    const cancelar = auth.onAuthStateChanged(user => { cancelar(); resolve(user); });
+  });
+}
+
+iniciar();
+</script>
+</body>
+</html>
