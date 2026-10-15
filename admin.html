@@ -979,45 +979,101 @@ async function pantallaAccesos() {
 // ============================================================
 // 8f) PANTALLA: Datos (historial completo → Excel)
 // ============================================================
-// Genera un .xlsx real (zip sin compresión), sin librerías externas
-function crearXlsx(filas) {
+// Genera un .xlsx real con varias hojas y formato (zip sin compresión, sin librerías)
+function crearXlsx(hojas) {
   const enc = new TextEncoder();
   const col = i => String.fromCharCode(65 + i);
   const x = t => String(t == null ? '' : t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  const rows = filas.map((f, r) => '<row r="' + (r + 1) + '">' + f.map((v, i) => {
-    const ref = col(i) + (r + 1);
-    if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
-    return '<c r="' + ref + '" t="inlineStr"' + (r === 0 ? ' s="1"' : '') + '><is><t>' + x(v) + '</t></is></c>';
-  }).join('') + '</row>').join('');
   const H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const hojaXml = h => {
+    const rows = h.f.map((fila, r) => '<row r="' + (r + 1) + '"' + (r === 0 && h.cab ? ' ht="24" customHeight="1"' : '') + '>' + fila.map((cel, i) => {
+      const o = (cel !== null && typeof cel === 'object') ? cel : { v: cel };
+      const est = o.s != null ? o.s : (r === 0 && h.cab ? 1 : (h.est ? h.est[i] : null));
+      const sa = est ? ' s="' + est + '"' : '', ref = col(i) + (r + 1);
+      if (typeof o.v === 'number' && isFinite(o.v)) return '<c r="' + ref + '"' + sa + '><v>' + o.v + '</v></c>';
+      return '<c r="' + ref + '"' + sa + ' t="inlineStr"><is><t>' + x(o.v) + '</t></is></c>';
+    }).join('') + '</row>').join('');
+    const nc = Math.max(...h.f.map(f => f.length));
+    return H + '<worksheet ' + NS + '><sheetViews><sheetView workbookViewId="0"' + (h.lineas === false ? ' showGridLines="0"' : '') + '>' +
+      (h.cab ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' : '') + '</sheetView></sheetViews>' +
+      '<cols>' + h.anchos.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols>' +
+      '<sheetData>' + rows + '</sheetData>' + (h.filtro && h.f.length > 1 ? '<autoFilter ref="A1:' + col(nc - 1) + h.f.length + '"/>' : '') + '</worksheet>';
+  };
+  const B = '<border><left/><right/><top/><bottom/><diagonal/></border>';
+  const bb = '<border><left/><right/><top/><bottom style="thin"><color rgb="FFD9D4D8"/></bottom><diagonal/></border>';
+  const xf = (nf, fo, fi, bo, al) => '<xf numFmtId="' + nf + '" fontId="' + fo + '" fillId="' + fi + '" borderId="' + bo + '" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"' + (al ? ' applyAlignment="1"><alignment ' + al + '/></xf>' : '/>');
+  const estilos = H + '<styleSheet ' + NS + '>' +
+    '<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="16"/><color rgb="FF211D30"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF7C7579"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF211D30"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFBE3EF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFEDF0"/></patternFill></fill></fills>' +
+    '<borders count="2">' + B + bb + '</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="11">' + xf(0, 0, 0, 0) + xf(0, 1, 2, 0, 'horizontal="center" vertical="center" wrapText="1"') + xf(0, 2, 0, 0) + xf(4, 0, 0, 1) + xf(0, 0, 0, 1) + xf(3, 0, 0, 1) +
+    xf(0, 3, 3, 0) + xf(4, 3, 3, 0) + xf(3, 3, 3, 0) + xf(0, 3, 4, 0) + xf(0, 4, 0, 0) + '</cellXfs></styleSheet>';
+  const n = hojas.length;
   const arch = [
-    ['[Content_Types].xml', H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+    ['[Content_Types].xml', H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + hojas.map((_, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('') + '</Types>'],
     ['_rels/.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
-    ['xl/workbook.xml', H + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Historial" sheetId="1" r:id="rId1"/></sheets></workbook>'],
-    ['xl/_rels/workbook.xml.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
-    ['xl/styles.xml', H + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>'],
-    ['xl/worksheets/sheet1.xml', H + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="2" width="12" customWidth="1"/><col min="3" max="5" width="18" customWidth="1"/><col min="6" max="6" width="38" customWidth="1"/><col min="7" max="10" width="13" customWidth="1"/></cols><sheetData>' + rows + '</sheetData></worksheet>']
-  ];
-  const T = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
+    ['xl/workbook.xml', H + '<workbook ' + NS + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + hojas.map((h, i) => '<sheet name="' + x(h.n) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + hojas.map((_, i) => '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '<Relationship Id="rId' + (n + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml', estilos]
+  ].concat(hojas.map((h, i) => ['xl/worksheets/sheet' + (i + 1) + '.xml', hojaXml(h)]));
+  const T = []; for (let k = 0; k < 256; k++) { let c = k; for (let j = 0; j < 8; j++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[k] = c >>> 0; }
   const crc = d => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = T[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
   const partes = [], central = []; let pos = 0;
   arch.forEach(([nom, txt]) => {
-    const n = enc.encode(nom), d = enc.encode(txt), cr = crc(d);
+    const nb = enc.encode(nom), d = enc.encode(txt), cr = crc(d);
     const lh = new DataView(new ArrayBuffer(30));
     lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
-    lh.setUint32(14, cr, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true); lh.setUint16(26, n.length, true);
+    lh.setUint32(14, cr, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true); lh.setUint16(26, nb.length, true);
     const ch = new DataView(new ArrayBuffer(46));
     ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
-    ch.setUint32(16, cr, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true); ch.setUint16(28, n.length, true); ch.setUint32(42, pos, true);
-    partes.push(new Uint8Array(lh.buffer), n, d); central.push(new Uint8Array(ch.buffer), n);
-    pos += 30 + n.length + d.length;
+    ch.setUint32(16, cr, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true); ch.setUint16(28, nb.length, true); ch.setUint32(42, pos, true);
+    partes.push(new Uint8Array(lh.buffer), nb, d); central.push(new Uint8Array(ch.buffer), nb);
+    pos += 30 + nb.length + d.length;
   });
   const tamC = central.reduce((a, p) => a + p.length, 0);
   const fin = new DataView(new ArrayBuffer(22));
   fin.setUint32(0, 0x06054b50, true); fin.setUint16(8, arch.length, true); fin.setUint16(10, arch.length, true); fin.setUint32(12, tamC, true); fin.setUint32(16, pos, true);
-  const todo = partes.concat(central, [new Uint8Array(fin.buffer)]);
-  const out = new Uint8Array(pos + tamC + 22); let o = 0; todo.forEach(p => { out.set(p, o); o += p.length; });
+  const out = new Uint8Array(pos + tamC + 22); let o = 0;
+  partes.concat(central, [new Uint8Array(fin.buffer)]).forEach(p => { out.set(p, o); o += p.length; });
   return out;
+}
+
+// Arma las hojas: Resumen (por área y total), Ventas, Gastos, Bajas y Retiros
+function armarHojas(filas, lista, rango, hoy) {
+  const suma = (l, i) => l.reduce((a, f) => a + (+f[i] || 0), 0);
+  const r2 = n => Math.round(n * 100) / 100;
+  const V = filas.filter(f => f[4] === 'Venta'), G = filas.filter(f => f[4] === 'Gasto');
+  const Ba = filas.filter(f => f[4] === 'Baja'), R = filas.filter(f => f[4] === 'Retiro de caja');
+  const c = (v, s) => ({ v, s });
+  const cab = l => l.map(t => c(t, 1));
+  const fila = (nom, area, vs, gs, est) => {
+    const tot = suma(vs, 8), ef = suma(vs.filter(f => f[9] === 'Efectivo'), 8), g = suma(gs, 8), tx = est === 'tot';
+    return [c(nom, tx ? 6 : 4), c(area, tx ? 6 : 4), c(r2(tot), tx ? 7 : 3), c(r2(ef), tx ? 7 : 3), c(r2(tot - ef), tx ? 7 : 3), c(r2(g), tx ? 7 : 3), c(r2(tot - g), tx ? 7 : 3), c(vs.length, tx ? 8 : 5)];
+  };
+  const res = [[c('Pizzería Salas · Salteñería Salas', 2)], [c('Resumen · ' + rango + ' · generado el ' + hoy, 10)], [],
+    cab(['Sucursal', 'Área', 'Ventas (Bs)', 'Efectivo (Bs)', 'QR (Bs)', 'Gastos (Bs)', 'Ganancia (Bs)', 'N.º de ventas'])];
+  lista.forEach(s => ['Pizzería', 'Salteñería'].forEach(area => {
+    if (area === 'Salteñería' && !s.tieneSalteneria) return;
+    res.push(fila(s.nombre, area, V.filter(f => f[2] === s.nombre && f[3] === area), G.filter(f => f[2] === s.nombre && f[3] === area)));
+  }));
+  res.push([]);
+  ['Pizzería', 'Salteñería'].forEach(area => res.push(fila('TOTAL ' + area.toUpperCase(), '', V.filter(f => f[3] === area), G.filter(f => f[3] === area), 'tot')));
+  res.push(fila('TOTAL GENERAL', 'Ambas áreas', V, G, 'tot'));
+  const prod = {};
+  V.forEach(f => { const p = prod[f[5]] = prod[f[5]] || { q: 0, m: 0 }; p.q += +f[6] || 0; p.m += +f[8] || 0; });
+  res.push([], [c('Lo más vendido', 9), c('', 9), c('', 9)], cab(['Producto', 'Unidades', 'Monto (Bs)']));
+  Object.entries(prod).sort((a, b) => b[1].m - a[1].m).slice(0, 10).forEach(p => res.push([c(p[0], 4), c(p[1].q, 5), c(r2(p[1].m), 3)]));
+  const hojas = [{ n: 'Resumen', f: res, anchos: [26, 14, 16, 16, 14, 16, 16, 14], lineas: false }];
+  hojas.push({ n: 'Ventas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 34, 10, 16, 14, 11], est: [4, 4, 4, 4, 4, 5, 3, 3, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Producto', 'Cantidad', 'Precio unit. (Bs)', 'Monto (Bs)', 'Pago']].concat(V.map(f => [f[0], f[1], f[2], f[3], f[5], f[6], f[7], f[8], f[9]])) });
+  hojas.push({ n: 'Gastos', cab: true, filtro: true, anchos: [12, 8, 22, 13, 40, 14], est: [4, 4, 4, 4, 4, 3],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Motivo', 'Monto (Bs)']].concat(G.map(f => [f[0], f[1], f[2], f[3], f[5], f[8]])) });
+  hojas.push({ n: 'Bajas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 44, 10], est: [4, 4, 4, 4, 4, 5],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Producto (motivo)', 'Cantidad']].concat(Ba.map(f => [f[0], f[1], f[2], f[3], f[5], f[6]])) });
+  hojas.push({ n: 'Retiros de caja', cab: true, filtro: true, anchos: [12, 8, 22, 13, 40, 14], est: [4, 4, 4, 4, 4, 3],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Detalle', 'Total (Bs)']].concat(R.map(f => [f[0], f[1], f[2], f[3], f[5], f[8]])) });
+  return hojas;
 }
 
 let rangoDatos = 'mes', sucDatos = 'todas';
@@ -1036,7 +1092,7 @@ async function pantallaDatos() {
           <button class="btn btn-primary" id="btn-excel">${ic('down', 18)} Descargar Excel</button>
           <div class="error-text" id="datos-msg"></div>
         </div>
-        <div class="t-secondary" style="text-align:center;">Archivo Excel (.xlsx) con ventas, gastos, bajas y retiros de caja.</div>
+        <div class="t-secondary" style="text-align:center;">Excel con hoja Resumen (por área y total), Ventas, Gastos, Bajas y Retiros.</div>
       </div>
       ${navInferiorAdmin('datos')}`;
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
@@ -1066,8 +1122,8 @@ async function pantallaDatos() {
     try { await conTiempoLimite(Promise.all(T), 40000, 'leer el historial'); } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo leer el historial. Revisa tu conexión.'; return; }
     if (!filas.length) { msg.textContent = 'No hay movimientos en ese período.'; return; }
     filas.sort((a, b) => (b[0] + b[1]).localeCompare(a[0] + a[1]));
-    const cab = ['Fecha', 'Hora', 'Sucursal', 'Área', 'Tipo', 'Detalle', 'Cantidad', 'Precio unit.', 'Monto Bs', 'Pago'];
-    const bytes = crearXlsx([cab].concat(filas));
+    const rango = { mes: 'este mes', '90': 'últimos 3 meses', todo: 'todo el historial' }[rangoDatos] + (sucDatos === 'todas' ? ' · todas las sucursales' : '');
+    const bytes = crearXlsx(armarHojas(filas, lista, rango, hoy));
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     a.download = 'salas-historial-' + hoy + '.xlsx';
