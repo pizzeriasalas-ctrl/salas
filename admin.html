@@ -481,7 +481,7 @@ function itemsStockPizza() {
 function isoLocal(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function hoyISO() { return isoLocal(new Date()); }
 function sumarDias(iso, n) { const [a, m, d] = iso.split('-').map(Number); return isoLocal(new Date(a, m - 1, d + n)); }
-function compsDe(s) { return ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || s.tieneSalteneria); }
+function compsDe(s) { return ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' ? s.tienePizzeria !== false : !!s.tieneSalteneria); }
 function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 function conTiempoLimite(promesa, ms, etiqueta) {
@@ -593,7 +593,7 @@ async function cargarSucursalesConCaja() {
   sucursales.sort((a, b) => (a.orden || 99) - (b.orden || 99));
   // Para cada sucursal, traemos la caja acumulada de sus compartimentos
   await Promise.all(sucursales.map(async (s) => {
-    const comps = ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || s.tieneSalteneria);
+    const comps = compsDe(s);
     const [docs, stockSnaps, refrescosSnap] = await Promise.all([
       Promise.all(comps.map(c => db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).get())),
       Promise.all(comps.map(c => db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).collection('stock').get())),
@@ -771,7 +771,7 @@ function pantallaAgregarSucursal(volver) {
 // ============================================================
 async function pantallaDetalleSucursal(s) {
   app.innerHTML = `<div class="empty-state">Cargando ${s.nombre}…</div>`;
-  const comps = ['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || s.tieneSalteneria);
+  const comps = compsDe(s);
   let detalle;
   try {
     const docs = await conTiempoLimite(Promise.all(comps.map(c =>
@@ -813,8 +813,14 @@ async function pantallaDetalleSucursal(s) {
               <button class="btn btn-secondary" data-editar="${d.compartimento}">Editar precios</button>
               <button class="btn btn-secondary" data-empleado="${d.compartimento}">Editar empleado</button>
             </div>
+            ${detalle.length > 1 ? `<button class="btn btn-danger" style="margin-top:10px;" data-clausurar="${d.compartimento}">Clausurar ${d.compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería'}</button>` : ''}
           </div>
         `; }).join('')}
+        ${['pizzeria', 'salteneria'].filter(c => !detalle.some(d => d.compartimento === c)).map(c => `
+          <div class="card"><div class="row">
+            <div><div class="t-subtitle">${c === 'pizzeria' ? 'Pizzería' : 'Salteñería'}</div><div class="t-secondary">Clausurada · no aparece en las apps</div></div>
+            <button class="btn btn-secondary" style="width:auto;padding:12px 18px;" data-reabrir="${c}">Reabrir</button>
+          </div></div>`).join('')}
         <button class="btn btn-danger" id="btn-eliminar-suc">Eliminar sucursal</button>
         <div class="t-secondary" style="text-align:center;">Se oculta de las apps; su historial se conserva.</div>
       </div>
@@ -831,6 +837,33 @@ async function pantallaDetalleSucursal(s) {
     });
     document.querySelectorAll('[data-empleado]').forEach(b => {
       b.onclick = () => pantallaEditarEmpleado(s, b.dataset.empleado, () => pantallaDetalleSucursal(s));
+    });
+    const campo = c => c === 'pizzeria' ? 'tienePizzeria' : 'tieneSalteneria';
+    const nomArea = c => c === 'pizzeria' ? 'Pizzería' : 'Salteñería';
+    const cambiarArea = (c, extra) => {
+      const cambios = Object.assign({ [campo(c)]: !!extra.abierta }, extra.datos || {});
+      return noEsperar(db.collection('sucursales').doc(s.id).update(cambios)).then(() => {
+        s[campo(c)] = !!extra.abierta;
+        if (extra.comp) s.compartimentos = Object.assign({}, s.compartimentos || {}, { [c]: extra.comp });
+        pantallaDetalleSucursal(s);
+      });
+    };
+    document.querySelectorAll('[data-clausurar]').forEach(b => {
+      b.onclick = () => {
+        const c = b.dataset.clausurar;
+        if (!confirm('¿Clausurar ' + nomArea(c) + ' en "' + s.nombre + '"? Dejará de aparecer en las apps y reportes. Sus ventas y su stock se conservan, y puedes reabrirla cuando quieras.')) return;
+        cambiarArea(c, { abierta: false });
+      };
+    });
+    document.querySelectorAll('[data-reabrir]').forEach(b => {
+      b.onclick = () => {
+        const c = b.dataset.reabrir;
+        if ((s.compartimentos || {})[c]) return cambiarArea(c, { abierta: true });
+        const pin = prompt('Elige un PIN de 4 dígitos para el empleado de ' + nomArea(c));
+        if (!/^\d{4}$/.test(pin || '')) { if (pin !== null) alert('El PIN debe tener 4 dígitos.'); return; }
+        const comp = { empleadoNombre: 'Empleado ' + nomArea(c), pin };
+        cambiarArea(c, { abierta: true, comp, datos: { ['compartimentos.' + c]: comp } });
+      };
     });
   }
   render();
@@ -1006,6 +1039,7 @@ async function pantallaReportes() {
     return { v, g, gan: v - g };
   };
   const hayAlgunaSalt = sucursales.some(s => s.tieneSalteneria);
+  const hayAlgunaPizza = sucursales.some(s => s.tienePizzeria !== false);
   const NOM_AREA = { pizzeria: 'Pizzería', salteneria: 'Salteñería' };
   const cajaGeneral = sucursales.reduce((a, s) => a + s._cajaTotal, 0);
   const agotados = sucursales.reduce((a, s) => a + s._stockBajo, 0);
@@ -1072,7 +1106,7 @@ async function pantallaReportes() {
           <span class="chip ${cmpHoy.cls}">${cmpHoy.ic} ${cmpHoy.txt}</span>
         </div>
         <div class="duo">
-          <div class="num"><div class="l">Ganancia de hoy</div><div class="v" style="color:${gananciaHoy >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(gananciaHoy)}</div><div class="s">${hayAlgunaSalt ? 'Pizzería ' + bs(ganHoyArea('pizzeria')) + ' · Salteñería ' + bs(ganHoyArea('salteneria')) : 'Ventas menos gastos'}</div></div>
+          <div class="num"><div class="l">Ganancia de hoy</div><div class="v" style="color:${gananciaHoy >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(gananciaHoy)}</div><div class="s">${hayAlgunaSalt && hayAlgunaPizza ? 'Pizzería ' + bs(ganHoyArea('pizzeria')) + ' · Salteñería ' + bs(ganHoyArea('salteneria')) : 'Ventas menos gastos'}</div></div>
           <div class="num ${nAlertas ? 'alerta' : ''}" id="ir-alertas" style="cursor:pointer;"><div class="l">Alertas</div><div class="v" style="color:${nAlertas ? 'var(--down)' : 'var(--up)'}">${nAlertas ? nAlertas : '✔'}</div><div class="s">${nAlertas ? 'Toca para ver' : 'Todo en orden'}</div></div>
         </div>
 
@@ -1088,7 +1122,7 @@ async function pantallaReportes() {
         </div>` : ''}
 
         <div class="ttl">¿Cuánto ganó cada área? (${etiqueta})</div>
-        ${['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' || hayAlgunaSalt).map(c => { const a = areaDe(c); return `
+        ${['pizzeria', 'salteneria'].filter(c => c === 'pizzeria' ? hayAlgunaPizza : hayAlgunaSalt).map(c => { const a = areaDe(c); return `
           <div class="card area-card">
             <div class="area-t"><i style="background:${c === 'pizzeria' ? 'var(--accent)' : 'var(--amber)'}"></i>${NOM_AREA[c]}</div>
             <div class="trio">
@@ -1405,6 +1439,7 @@ function armarHojas(filas, lista, rango, hoy) {
     cab(['Sucursal', 'Área', 'Ventas (Bs)', 'Efectivo (Bs)', 'QR (Bs)', 'Gastos (Bs)', 'Ganancia (Bs)', 'N.º de ventas'])];
   lista.forEach(s => ['Pizzería', 'Salteñería'].forEach(area => {
     if (area === 'Salteñería' && !s.tieneSalteneria) return;
+    if (area === 'Pizzería' && s.tienePizzeria === false) return;
     res.push(fila(s.nombre, area, V.filter(f => f[2] === s.nombre && f[3] === area), G.filter(f => f[2] === s.nombre && f[3] === area)));
   }));
   res.push([]);
