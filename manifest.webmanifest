@@ -5,7 +5,7 @@
  "description": "Pizzería Salas · Salteñería Salas",
  "lang": "es",
  "start_url": "./index.html",
- "scope": "./",
+ "scope": "./index.html",
  "display": "standalone",
  "orientation": "portrait",
  "background_color": "#faf8f8",
