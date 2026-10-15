@@ -833,11 +833,16 @@ async function pantallaPrincipal() {
   }
 
   async function render() {
-    const [ventas, snapComp] = await Promise.all([cargarVentasHoy(), compRef.get()]);
+    const [ventas, snapComp, snapGastosHoy] = await Promise.all([
+      cargarVentasHoy(), compRef.get(),
+      compRef.collection('gastos').where('fecha', '==', hoyISO()).get().catch(() => ({ docs: [] }))
+    ]);
+    const gastosHoyTotal = snapGastosHoy.docs.reduce((a, d) => a + (d.data().monto || 0), 0);
     const totalEfectivo = ventas.filter(v => v.formaPago === 'efectivo').reduce((a, v) => a + v.monto, 0);
     const totalQr = ventas.filter(v => v.formaPago === 'qr').reduce((a, v) => a + v.monto, 0);
     const totalHoy = totalEfectivo + totalQr;
     const cajaEfectivoActual = snapComp.exists ? (snapComp.data().cajaEfectivo || 0) : 0;
+    const gananciaHoy = totalHoy - gastosHoyTotal;
     const fechaHoyTexto = new Date().toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
 
     // Ventas por hora (real, a partir de los timestamps de hoy)
@@ -874,6 +879,16 @@ async function pantallaPrincipal() {
           <div class="stat-box">
             <div class="valor">${cajaEfectivoActual.toFixed(0)} Bs</div>
             <div class="lbl">${ic('cash',13)} Caja efectivo</div>
+          </div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="valor" style="color:var(--danger);">${gastosHoyTotal.toFixed(0)} Bs</div>
+            <div class="lbl">Gastos hoy · ${nombreComp}</div>
+          </div>
+          <div class="stat-box">
+            <div class="valor" style="color:${gananciaHoy >= 0 ? 'var(--success)' : 'var(--danger)'};">${gananciaHoy.toFixed(0)} Bs</div>
+            <div class="lbl">Ganancia hoy · ${nombreComp}</div>
           </div>
         </div>
 
