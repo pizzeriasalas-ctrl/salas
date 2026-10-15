@@ -247,12 +247,58 @@ body{
 .sync-pill.ok{background:#e2f6ec;color:#1f7a4d;border:1px solid #9fd8b9}
 .sync-pill[hidden]{display:none}
 .nota-hist{font-size:.78rem;color:var(--text-secondary);text-align:center}
+/* --- Etapa 3: ventas con cuadrícula y carrito --- */
+.logo-svg{display:block;flex-shrink:0}
+.sk{border-radius:var(--radius-md);background:linear-gradient(90deg,var(--surface-2) 25%,var(--border) 50%,var(--surface-2) 75%);background-size:200% 100%;animation:sk 1.2s infinite linear}
+@keyframes sk{to{background-position:-200% 0}}
+.hero{background:var(--accent);color:#fff;border-radius:var(--radius-lg);padding:18px;box-shadow:var(--shadow-md)}
+.hero-l{font-size:.95rem;opacity:.9;font-weight:700}
+.hero-n{font-size:2.5rem;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:2px 0 12px}
+.split{display:flex;height:10px;border-radius:5px;background:rgba(255,255,255,.25);overflow:hidden}
+.split i{display:block;transition:width .5s ease}
+.split .s-ef{background:#fff}.split .s-qr{background:#ffd479}
+.split-l{display:flex;justify-content:space-between;font-size:.85rem;margin-top:8px;font-weight:700}
+.cats{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.cats button{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:12px 16px;border-radius:24px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-primary);font-size:1rem;font-weight:700}
+.cats button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.grilla{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grp{grid-column:1/-1;font-size:.95rem;font-weight:800;color:var(--text-secondary);margin-top:6px}
+.prod{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:116px;padding:12px;border-radius:var(--radius-lg);border:none;text-align:left;background:hsl(var(--ch) 80% 93%);color:hsl(var(--ch) 55% 22%);transition:transform .1s}
+.prod:active{transform:scale(.96)}
+.c-pizza{--ch:12}.c-saltena{--ch:36}.c-refresco{--ch:205}.c-cafe{--ch:28}.c-caja{--ch:265}
+.prod .pi{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:hsl(var(--ch) 65% 40%);color:#fff}
+.prod .pn{font-size:1.08rem;font-weight:800;line-height:1.15}
+.prod .pp{font-size:1rem;font-weight:700;opacity:.85}
+.prod .pc{position:absolute;top:8px;right:8px;min-width:28px;height:28px;padding:0 8px;border-radius:14px;background:var(--text-primary);color:var(--bg);font-weight:800;display:flex;align-items:center;justify-content:center;animation:pop .2s}
+[data-theme="dark"] .prod{background:hsl(var(--ch) 26% 20%);color:hsl(var(--ch) 60% 88%)}
+@keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+.barra-carrito{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom,0px));width:calc(100% - 32px);max-width:448px;z-index:20;display:flex;align-items:center;gap:12px;padding:16px 18px;border:none;border-radius:18px;background:var(--text-primary);color:var(--bg);font-size:1.08rem;font-weight:700;box-shadow:var(--shadow-md);animation:sube .2s}
+.barra-carrito[hidden]{display:none}
+.barra-carrito .cb-n{min-width:30px;height:30px;border-radius:15px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
+.barra-carrito .cb-t{flex:1;text-align:left}
+@keyframes sube{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+.ov{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;animation:fade .15s}
+.sheet{width:100%;max-width:480px;max-height:88vh;overflow:auto;background:var(--surface);border-radius:24px 24px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));animation:sheet .22s ease}
+@keyframes fade{from{opacity:0}}
+@keyframes sheet{from{transform:translateY(40px);opacity:0}}
+.lin{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{width:46px;height:46px;border-radius:50%;border:none;background:var(--accent-light);color:var(--accent);font-size:1.5rem;font-weight:800}
+.qty span{min-width:24px;text-align:center;font-weight:800;font-size:1.2rem}
+.toggle.pago{margin:14px 0 4px}
+.toggle.pago button{display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;font-size:1.05rem}
+.btn-cobrar{padding:20px;font-size:1.2rem;margin-top:8px}
+.ok-ov{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(20,10,15,.55);animation:fade .15s;pointer-events:none}
+.ok-c{width:96px;height:96px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;animation:pop .35s cubic-bezier(.2,1.4,.4,1)}
+.ok-t{color:#fff;font-size:1.4rem;font-weight:800;margin-top:8px}
+.ok-s{color:#fff;font-size:1.1rem;opacity:.9}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
 <body>
 
 <div id="sync-pill" class="sync-pill" hidden></div>
-<div id="app" class="screen">Cargando…</div>
+<div id="app" class="screen"><div class="px" style="padding-top:20px;display:flex;flex-direction:column;gap:12px;"><div class="sk" style="height:44px;width:65%"></div><div class="sk" style="height:130px"></div><div class="sk" style="height:70px"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="sk" style="height:116px"></div><div class="sk" style="height:116px"></div></div></div></div>
 
 <script>
 // ============================================================
@@ -401,6 +447,15 @@ function ic(nombre, size) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONOS[nombre] || ''}</svg>`;
 }
 
+function logo(s) {
+  return `<svg class="logo-svg" width="${s}" height="${s}" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" style="fill:var(--accent)"/><path d="M24 9 11 38h26L24 9Z" fill="#fff"/><circle cx="24" cy="26" r="2.2" style="fill:var(--accent)"/><circle cx="20" cy="33" r="2.2" style="fill:var(--accent)"/><circle cx="28" cy="33" r="2.2" style="fill:var(--accent)"/></svg>`;
+}
+function esqueleto() {
+  return `<div class="px" style="padding-top:20px;display:flex;flex-direction:column;gap:12px;">
+    <div class="sk" style="height:44px;width:65%"></div><div class="sk" style="height:130px"></div>
+    <div class="sk" style="height:70px"></div><div class="sk" style="height:48px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="sk" style="height:116px"></div><div class="sk" style="height:116px"></div></div></div>`;
+}
 function slug(s) {
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
 }
@@ -686,6 +741,7 @@ async function pantallaPrincipal() {
   const compRef = db.collection('sucursales').doc(sucursalActual.id)
     .collection('compartimentos').doc(compartimentoActual);
   const ventasRef = compRef.collection('ventas');
+  app.innerHTML = esqueleto();
 
   // --- Catálogo (solo lo que corresponde a cada compartimento) ---
   const tabsDisponibles = compartimentoActual === 'pizzeria'
@@ -697,127 +753,127 @@ async function pantallaPrincipal() {
       ]
     : [{ id: 'saltena', lbl: ic('empanada',16)+' Salteña' }, { id: 'refresco', lbl: ic('drink',16)+' Refresco' }, { id: 'cafe', lbl: ic('coffee',16)+' Café/Té' }];
 
+  const CATS = { pizza: 'pizza', saltena: 'empanada', refresco: 'drink', cafe: 'coffee', caja: 'box' };
+  const PRODUCTOS = {
+    pizza: TAMANOS_PIZZA.flatMap(t => SABORES_PIZZA[t].length
+      ? SABORES_PIZZA[t].map(s => ({ nombre: `Pizza ${t} ${s}`, titulo: s, grupo: t }))
+      : [{ nombre: `Pizza ${t}`, titulo: t, grupo: 'Cono' }]),
+    saltena: [{ nombre: 'Salteña mixta', titulo: 'Salteña mixta' }],
+    refresco: TAMANOS_REFRESCO.map(t => ({ nombre: `Refresco ${t}`, titulo: t })),
+    cafe: [{ nombre: 'Café', titulo: 'Café' }, { nombre: 'Té', titulo: 'Té' }],
+    caja: TAMANOS_CAJA.map(t => ({ nombre: `Caja ${t}`, titulo: t }))
+  };
   let tabActiva = tabsDisponibles[0].id;
-  let pizzaTamano = null;
-  let productoElegido = null; // texto final que se guarda como venta
+  let precios = {};
+  let formaPago = 'efectivo';
+  let ultimaVenta = null; // para "Deshacer última venta"
+  const carrito = new Map(); // nombre -> { cantidad, unitario }
+  const bs = n => (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, '') + ' Bs';
+  const inc = n => firebase.firestore.FieldValue.increment(n);
 
-  function armarSelectorProducto() {
-    return `
-      <div class="toggle" id="tabs-producto">
-        ${tabsDisponibles.map(t => `<button class="${t.id===tabActiva?'active':''}" data-tab="${t.id}">${t.lbl}</button>`).join('')}
-      </div>
-      <div id="opciones-producto" style="margin-top:10px;"></div>
-      <div class="t-secondary" id="producto-elegido-lbl" style="margin-top:8px;"></div>
-    `;
-  }
-
-  function renderOpciones() {
-    const cont = document.getElementById('opciones-producto');
-    if (!cont) return;
-    if (tabActiva === 'pizza') {
-      if (!pizzaTamano) {
-        cont.innerHTML = `
-          <div class="t-eyebrow" style="margin-bottom:6px;">Tamaño</div>
-          <div class="stat-row" style="flex-wrap:wrap;">
-            ${TAMANOS_PIZZA.map(t => `<button class="btn btn-secondary" data-tamano="${t}" style="flex:1 1 45%;">${t}</button>`).join('')}
-          </div>
-        `;
-        cont.querySelectorAll('[data-tamano]').forEach(b => {
-          b.onclick = () => { pizzaTamano = b.dataset.tamano; renderOpciones(); };
-        });
-      } else if (SABORES_PIZZA[pizzaTamano].length === 0) {
-        seleccionarProducto(`Pizza ${pizzaTamano}`);
-        pizzaTamano = null;
-      } else {
-        cont.innerHTML = `
-          <div class="row"><div class="t-eyebrow">Sabor — ${pizzaTamano}</div><button class="t-secondary" id="btn-cambiar-tamano" style="background:none;border:none;">‹ cambiar tamaño</button></div>
-          <div class="stat-row" style="flex-wrap:wrap;margin-top:6px;">
-            ${SABORES_PIZZA[pizzaTamano].map(s => `<button class="btn btn-secondary" data-sabor="${s}" style="flex:1 1 45%;">${s}</button>`).join('')}
-          </div>
-        `;
-        document.getElementById('btn-cambiar-tamano').onclick = () => { pizzaTamano = null; renderOpciones(); };
-        const tamanoCongelado = pizzaTamano;
-        cont.querySelectorAll('[data-sabor]').forEach(b => {
-          b.onclick = () => { seleccionarProducto(`Pizza ${tamanoCongelado} ${b.dataset.sabor}`); pizzaTamano = null; };
-        });
-      }
-    } else if (tabActiva === 'saltena') {
-      cont.innerHTML = `<button class="btn btn-secondary" id="btn-saltena">Salteña mixta</button>`;
-      document.getElementById('btn-saltena').onclick = () => seleccionarProducto('Salteña mixta');
-    } else if (tabActiva === 'refresco') {
-      cont.innerHTML = `
-        <div class="stat-row" style="flex-wrap:wrap;">
-          ${TAMANOS_REFRESCO.map(t => `<button class="btn btn-secondary" data-refresco="${t}" style="flex:1 1 30%;">${t}</button>`).join('')}
-        </div>
-      `;
-      cont.querySelectorAll('[data-refresco]').forEach(b => {
-        b.onclick = () => seleccionarProducto(`Refresco ${b.dataset.refresco}`);
-      });
-    } else if (tabActiva === 'cafe') {
-      cont.innerHTML = `
-        <div class="stat-row">
-          <button class="btn btn-secondary" data-cafe="Café">Café</button>
-          <button class="btn btn-secondary" data-cafe="Té">Té</button>
-        </div>
-      `;
-      cont.querySelectorAll('[data-cafe]').forEach(b => {
-        b.onclick = () => seleccionarProducto(b.dataset.cafe);
-      });
-    } else if (tabActiva === 'caja') {
-      cont.innerHTML = `
-        <div class="stat-row">
-          ${TAMANOS_CAJA.map(t => `<button class="btn btn-secondary" data-caja="${t}">${t}</button>`).join('')}
-        </div>
-      `;
-      cont.querySelectorAll('[data-caja]').forEach(b => {
-        b.onclick = () => seleccionarProducto(`Caja ${b.dataset.caja}`);
-      });
-    }
-  }
-
-  let preciosActuales = {};
-  let cantidadVenta = 1;
-  function actualizarTotalVenta() {
-    const campo = document.getElementById('in-monto');
-    const lblCant = document.getElementById('lbl-cantidad');
-    const lblTotal = document.getElementById('lbl-total-venta');
-    if (!campo || !lblCant || !lblTotal) return;
-    const unitario = parseFloat(campo.value) || 0;
-    lblCant.textContent = cantidadVenta;
-    lblTotal.textContent = unitario > 0 ? `Total: ${(unitario * cantidadVenta).toFixed(2)} Bs` : '';
-  }
-  function seleccionarProducto(nombre) {
-    productoElegido = nombre;
-    const lbl = document.getElementById('producto-elegido-lbl');
-    const btnAgregar = document.getElementById('btn-agregar');
-    const inMonto = document.getElementById('in-monto');
-    if (lbl) lbl.innerHTML = `<span class="badge badge-accent">Elegido: ${nombre}</span>`;
-    if (btnAgregar) btnAgregar.disabled = false;
-    if (inMonto) {
-      const precioFijo = preciosActuales[nombre];
-      if (precioFijo != null) {
-        inMonto.value = precioFijo;
-        inMonto.readOnly = true;
-      } else {
-        inMonto.value = '';
-        inMonto.readOnly = false;
-      }
-      actualizarTotalVenta();
-    }
-  }
-
-  function wireSelectorProducto() {
-    document.querySelectorAll('#tabs-producto button').forEach(b => {
-      b.onclick = () => {
-        tabActiva = b.dataset.tab; pizzaTamano = null; productoElegido = null;
-        document.querySelectorAll('#tabs-producto button').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        const lbl = document.getElementById('producto-elegido-lbl'); if (lbl) lbl.innerHTML = '';
-        const btnAgregar = document.getElementById('btn-agregar'); if (btnAgregar) btnAgregar.disabled = true;
-        renderOpciones();
-      };
+  function pintarGrilla() {
+    const g = document.getElementById('grilla'); if (!g) return;
+    document.querySelectorAll('#tabs-cat button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabActiva));
+    let grupo = null, h = '';
+    PRODUCTOS[tabActiva].forEach(p => {
+      if (p.grupo && p.grupo !== grupo) { grupo = p.grupo; h += `<div class="grp">${grupo}</div>`; }
+      const pr = precios[p.nombre], n = carrito.has(p.nombre) ? carrito.get(p.nombre).cantidad : 0;
+      h += `<button class="prod c-${tabActiva}" data-p="${p.nombre}"><span class="pi">${ic(CATS[tabActiva], 24)}</span><span class="pn">${p.titulo}</span><span class="pp">${pr != null ? bs(pr) : 'Poner precio'}</span>${n ? `<span class="pc">${n}</span>` : ''}</button>`;
     });
-    renderOpciones();
+    g.innerHTML = h;
+    g.querySelectorAll('[data-p]').forEach(b => { b.onclick = () => agregarAlCarrito(b.dataset.p); });
+  }
+  function pintarBarra() {
+    const b = document.getElementById('barra-carrito'); if (!b) return;
+    let n = 0, t = 0; carrito.forEach(l => { n += l.cantidad; t += l.cantidad * l.unitario; });
+    b.hidden = n === 0;
+    b.innerHTML = `<span class="cb-n">${n}</span><span class="cb-t">Ver pedido</span><strong>${bs(t)}</strong>`;
+  }
+  function pedirPrecio(nombre) {
+    return new Promise(res => {
+      const o = document.createElement('div'); o.className = 'ov';
+      o.innerHTML = `<div class="sheet"><div class="t-subtitle">${nombre}</div><div class="t-secondary">¿A cuántos Bs se vende?</div><div class="field" style="margin:12px 0;"><input type="number" id="in-pr" inputmode="decimal" placeholder="0.00"></div><button class="btn btn-primary" id="ok-pr">Listo</button><button class="btn btn-tertiary" id="no-pr">Cancelar</button></div>`;
+      document.body.appendChild(o);
+      const cerrar = v => { o.remove(); res(v); };
+      o.querySelector('#ok-pr').onclick = () => { const v = parseFloat(o.querySelector('#in-pr').value); cerrar(v > 0 ? v : null); };
+      o.querySelector('#no-pr').onclick = () => cerrar(null);
+      setTimeout(() => { const i = o.querySelector('#in-pr'); if (i) i.focus(); }, 50);
+    });
+  }
+  async function agregarAlCarrito(nombre) {
+    const l = carrito.get(nombre);
+    if (l) l.cantidad++;
+    else {
+      let u = precios[nombre];
+      if (u == null) { u = await pedirPrecio(nombre); if (!u) return; }
+      carrito.set(nombre, { cantidad: 1, unitario: u });
+    }
+    pintarGrilla(); pintarBarra();
+  }
+  function confirmacion(t) {
+    const d = document.createElement('div'); d.className = 'ok-ov';
+    d.innerHTML = `<div class="ok-c">${ic('check', 52)}</div><div class="ok-t">¡Venta lista!</div><div class="ok-s">${bs(t)}</div>`;
+    document.body.appendChild(d); setTimeout(() => d.remove(), 1100);
+  }
+  function abrirCarrito() {
+    if (!carrito.size) return;
+    const o = document.createElement('div'); o.className = 'ov';
+    document.body.appendChild(o);
+    const cerrar = () => { o.remove(); pintarGrilla(); pintarBarra(); };
+    o.onclick = e => { if (e.target === o) cerrar(); };
+    function pintar(err) {
+      if (!carrito.size) return cerrar();
+      let t = 0; carrito.forEach(l => { t += l.cantidad * l.unitario; });
+      o.innerHTML = `<div class="sheet"><div class="row"><div class="t-subtitle">Tu pedido</div><button class="header-btn" id="x-c">✕</button></div>
+        <div>${[...carrito].map(([n, l]) => `<div class="lin"><div class="grow"><div class="t-body"><b>${n}</b></div><div class="t-secondary">${bs(l.unitario)} c/u</div></div><div class="qty"><button data-m="${n}">−</button><span>${l.cantidad}</span><button data-s="${n}">+</button></div></div>`).join('')}</div>
+        <div class="toggle pago"><button data-pago="efectivo" class="${formaPago === 'efectivo' ? 'active' : ''}">${ic('cash', 20)} Efectivo</button><button data-pago="qr" class="${formaPago === 'qr' ? 'active' : ''}">${ic('phone', 20)} QR</button></div>
+        <div class="error-text es-error">${err || ''}</div>
+        <button class="btn btn-primary btn-cobrar" id="cobrar">Cobrar ${bs(t)}</button></div>`;
+      o.querySelector('#x-c').onclick = cerrar;
+      o.querySelectorAll('[data-m]').forEach(b => { b.onclick = () => { const l = carrito.get(b.dataset.m); if (--l.cantidad <= 0) carrito.delete(b.dataset.m); pintar(); }; });
+      o.querySelectorAll('[data-s]').forEach(b => { b.onclick = () => { carrito.get(b.dataset.s).cantidad++; pintar(); }; });
+      o.querySelectorAll('[data-pago]').forEach(b => { b.onclick = () => { formaPago = b.dataset.pago; pintar(); }; });
+      o.querySelector('#cobrar').onclick = async () => {
+        o.querySelector('#cobrar').disabled = true;
+        try {
+          const lineas = [...carrito].map(([producto, l]) => ({ producto, cantidad: l.cantidad, unitario: l.unitario, monto: l.unitario * l.cantidad }));
+          for (const l of lineas) {
+            l.refStock = referenciaStock(l.producto);
+            if (l.refStock) {
+              const snap = await conTiempoLimite(l.refStock.get(), 8000, 'leer stock');
+              if ((snap.exists ? (snap.data().cantidad || 0) : 0) < l.cantidad) throw new Error('SIN_STOCK:' + l.producto);
+            }
+          }
+          const fp = formaPago; let total = 0;
+          for (const l of lineas) {
+            if (l.refStock) await guardarSinBloquear(l.refStock.set({ producto: l.refStock.nombreCorto, cantidad: inc(-l.cantidad) }, { merge: true }));
+            l.ref = ventasRef.doc();
+            await guardarSinBloquear(l.ref.set({ producto: l.producto, cantidad: l.cantidad, precioUnitario: l.unitario, monto: l.monto, formaPago: fp, fecha: hoyISO(), creadoEn: firebase.firestore.Timestamp.now(), schemaVersion: 1 }));
+            total += l.monto;
+          }
+          // La caja se acumula hasta que la dueña la retira (no se reinicia cada día)
+          await guardarSinBloquear(compRef.set({ cajaEfectivo: inc(fp === 'efectivo' ? total : 0), cajaTotal: inc(total) }, { merge: true }));
+          ultimaVenta = { lineas, total, formaPago: fp };
+          carrito.clear(); o.remove(); confirmacion(total);
+          await render();
+        } catch (e) {
+          const m = (e && e.message) || '';
+          pintar(m.startsWith('SIN_STOCK:') ? `No hay suficiente stock de "${m.slice(10)}".` : 'No se pudo guardar. Intenta de nuevo.');
+        }
+      };
+    }
+    pintar();
+  }
+  async function deshacer() {
+    const u = ultimaVenta; if (!u) return;
+    if (!confirm(`¿Deshacer la última venta de ${bs(u.total)}?`)) return;
+    ultimaVenta = null;
+    for (const l of u.lineas) {
+      if (l.refStock) await guardarSinBloquear(l.refStock.set({ producto: l.refStock.nombreCorto, cantidad: inc(l.cantidad) }, { merge: true }));
+      await guardarSinBloquear(l.ref.delete());
+    }
+    await guardarSinBloquear(compRef.set({ cajaEfectivo: inc(u.formaPago === 'efectivo' ? -u.total : 0), cajaTotal: inc(-u.total) }, { merge: true }));
+    await render();
   }
 
   async function cargarVentasHoy() {
@@ -859,9 +915,12 @@ async function pantallaPrincipal() {
     const horasAMostrar = [8,10,12,14,16,18,20];
     const iniciales = (comp.empleadoNombre.replace(' (prueba)','').match(/\b\w/g) || ['E']).slice(0,2).join('').toUpperCase();
 
+    const pEf = totalHoy > 0 ? (totalEfectivo / totalHoy) * 100 : 0;
+    precios = snapComp.exists ? (snapComp.data().precios || {}) : {};
+
     app.innerHTML = `
       <div class="header-rich">
-        <div class="avatar-circle">${iniciales}</div>
+        ${logo(44)}
         <div class="grow">
           <div class="t-subtitle">Hola, ${comp.empleadoNombre.replace(' (prueba)','')}</div>
           <div class="t-secondary">${sucursalActual.nombre.replace(' (PRUEBA)','')} · ${nombreComp}</div>
@@ -871,51 +930,24 @@ async function pantallaPrincipal() {
       </div>
       <div class="px stack">
         <div class="t-secondary" style="text-transform:capitalize;margin-top:-6px;">${fechaHoyTexto}</div>
-        <div class="stat-row">
-          <div class="stat-box">
-            <div class="valor">${totalHoy.toFixed(0)} Bs</div>
-            <div class="lbl">${ic('cart',13)} Ventas hoy</div>
-          </div>
-          <div class="stat-box">
-            <div class="valor">${cajaEfectivoActual.toFixed(0)} Bs</div>
-            <div class="lbl">${ic('cash',13)} Caja efectivo</div>
-          </div>
+        <div class="hero">
+          <div class="hero-l">Ventas de hoy · ${nombreComp}</div>
+          <div class="hero-n">${bs(totalHoy)}</div>
+          <div class="split"><i class="s-ef" style="width:${pEf}%"></i><i class="s-qr" style="width:${totalHoy > 0 ? 100 - pEf : 0}%"></i></div>
+          <div class="split-l"><span>Efectivo ${bs(totalEfectivo)}</span><span>QR ${bs(totalQr)}</span></div>
         </div>
         <div class="stat-row">
-          <div class="stat-box">
-            <div class="valor" style="color:var(--danger);">${gastosHoyTotal.toFixed(0)} Bs</div>
-            <div class="lbl">Gastos hoy · ${nombreComp}</div>
-          </div>
-          <div class="stat-box">
-            <div class="valor" style="color:${gananciaHoy >= 0 ? 'var(--success)' : 'var(--danger)'};">${gananciaHoy.toFixed(0)} Bs</div>
-            <div class="lbl">Ganancia hoy · ${nombreComp}</div>
-          </div>
+          <div class="stat-box"><div class="valor">${bs(cajaEfectivoActual)}</div><div class="lbl">${ic('cash',13)} Caja efectivo</div></div>
+          <div class="stat-box"><div class="valor" style="color:var(--danger);">${bs(gastosHoyTotal)}</div><div class="lbl">Gastos hoy</div></div>
+          <div class="stat-box"><div class="valor" style="color:${gananciaHoy >= 0 ? 'var(--success)' : 'var(--danger)'};">${bs(gananciaHoy)}</div><div class="lbl">Ganancia hoy</div></div>
         </div>
 
-        <button class="btn btn-primary" id="btn-mostrar-form">+ Registrar venta</button>
-
-        <div class="card" id="form-venta" style="display:none;">
-          ${armarSelectorProducto()}
-          <div class="field" style="margin-top:12px;"><label>Precio unitario en Bs</label><input type="number" id="in-monto" inputmode="decimal" placeholder="0.00"></div>
-          <div class="field" style="margin-top:10px;">
-            <label>Cantidad</label>
-            <div class="row" style="gap:10px;">
-              <button class="header-btn" id="btn-menos-cant">−</button>
-              <span id="lbl-cantidad" style="min-width:30px;text-align:center;font-weight:700;font-size:1.1rem;">1</span>
-              <button class="header-btn" id="btn-mas-cant">+</button>
-              <span class="t-secondary" id="lbl-total-venta" style="margin-left:auto;"></span>
-            </div>
-          </div>
-          <div class="toggle" id="toggle-pago" style="margin-top:10px;">
-            <button class="active" data-pago="efectivo">${ic('cash',16)} Efectivo</button>
-            <button data-pago="qr">${ic('phone',16)} QR</button>
-          </div>
-          <button class="btn btn-primary" id="btn-agregar" style="margin-top:12px;" disabled>Agregar venta</button>
-          <div class="error-text" id="venta-error"></div>
-        </div>
+        <div class="cats" id="tabs-cat">${tabsDisponibles.map(t => `<button data-tab="${t.id}">${t.lbl}</button>`).join('')}</div>
+        <div class="grilla" id="grilla"></div>
+        ${ultimaVenta ? `<button class="btn btn-danger" id="btn-deshacer">↩ Deshacer última venta (${bs(ultimaVenta.total)})</button>` : ''}
 
         <div class="t-eyebrow" style="margin-top:var(--space-2);">Ventas de hoy (${ventas.length})</div>
-        <div class="card-flat">
+        <div class="card-flat" style="margin-bottom:90px;">
           ${ventas.length === 0 ? `<div class="t-secondary">Aún no hay ventas registradas hoy.</div>` : ventas.map(v => `
             <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
               <span class="t-body">${v.cantidad > 1 ? v.cantidad + 'x ' : ''}${v.producto} <span class="t-secondary">${v.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span></span>
@@ -925,6 +957,7 @@ async function pantallaPrincipal() {
         </div>
       </div>
 
+      <button class="barra-carrito" id="barra-carrito" hidden></button>
       <div class="bottom-nav">
         <button class="active"><span class="ic">${ic('home')}</span>Inicio</button>
         <button id="btn-ir-stock-nav"><span class="ic">${ic('box')}</span>Stock</button>
@@ -935,18 +968,6 @@ async function pantallaPrincipal() {
 
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
     document.getElementById('btn-salir').onclick = () => { compartimentoActual = null; pantallaElegirCompartimento(); };
-    document.getElementById('btn-mostrar-form').onclick = async () => {
-      document.getElementById('form-venta').style.display = 'block';
-      document.getElementById('btn-mostrar-form').style.display = 'none';
-      cantidadVenta = 1;
-      try {
-        const snapPrecios = await compRef.get();
-        preciosActuales = snapPrecios.exists ? (snapPrecios.data().precios || {}) : {};
-      } catch (e) {
-        preciosActuales = {};
-      }
-      wireSelectorProducto();
-    };
     document.getElementById('btn-ir-stock-nav').onclick = () => pantallaStock().catch(e => mostrarError('abrir stock', e));
     document.querySelectorAll('[data-nav="historial"]').forEach(b => {
       b.onclick = () => pantallaHistorial().catch(e => mostrarError('abrir historial', e));
@@ -954,63 +975,11 @@ async function pantallaPrincipal() {
     document.querySelectorAll('[data-nav="caja"]').forEach(b => {
       b.onclick = () => pantallaCaja().catch(e => mostrarError('abrir caja', e));
     });
-    document.querySelectorAll('[data-proximamente]').forEach(b => {
-      b.onclick = () => alert(b.dataset.proximamente + ': próximamente en esta base visual.');
-    });
-
-    let formaPago = 'efectivo';
-    document.querySelectorAll('#toggle-pago button').forEach(b => {
-      b.onclick = () => {
-        formaPago = b.dataset.pago;
-        document.querySelectorAll('#toggle-pago button').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-      };
-    });
-
-    document.getElementById('btn-mas-cant').onclick = () => { cantidadVenta++; actualizarTotalVenta(); };
-    document.getElementById('btn-menos-cant').onclick = () => { if (cantidadVenta > 1) cantidadVenta--; actualizarTotalVenta(); };
-    document.getElementById('in-monto').oninput = actualizarTotalVenta;
-
-    document.getElementById('btn-agregar').onclick = async () => {
-      const producto = productoElegido;
-      const unitario = parseFloat(document.getElementById('in-monto').value);
-      const cantidad = cantidadVenta;
-      const monto = unitario * cantidad;
-      const errorEl = document.getElementById('venta-error');
-      if (!producto || isNaN(unitario) || unitario <= 0) {
-        errorEl.textContent = 'Elige un producto y un precio válido';
-        return;
-      }
-      errorEl.textContent = '';
-      try {
-        const refStock = referenciaStock(producto);
-        let actual = 0;
-        if (refStock) {
-          const snap = await conTiempoLimite(refStock.get(), 8000, 'leer stock');
-          actual = snap.exists ? (snap.data().cantidad || 0) : 0;
-          if (actual < cantidad) throw new Error('SIN_STOCK');
-        }
-        if (refStock) await guardarSinBloquear(refStock.set({ producto: refStock.nombreCorto, cantidad: firebase.firestore.FieldValue.increment(-cantidad) }, { merge: true }));
-        await guardarSinBloquear(ventasRef.doc().set({
-          producto, cantidad, precioUnitario: unitario, monto, formaPago,
-          fecha: hoyISO(),
-          creadoEn: firebase.firestore.Timestamp.now(),
-          schemaVersion: 1
-        }));
-        // La caja se acumula hasta que la dueña la retira (no se reinicia cada día)
-        await guardarSinBloquear(compRef.set({
-          cajaEfectivo: firebase.firestore.FieldValue.increment(formaPago === 'efectivo' ? monto : 0),
-          cajaTotal: firebase.firestore.FieldValue.increment(monto)
-        }, { merge: true }));
-        await render();
-      } catch (e) {
-        if (e.message === 'SIN_STOCK') {
-          errorEl.textContent = `No hay suficiente stock de "${producto}" para esa cantidad.`;
-        } else {
-          errorEl.textContent = 'No se pudo guardar (sin internet: se guardará solo cuando vuelva la conexión)';
-        }
-      }
-    };
+    document.querySelectorAll('#tabs-cat button').forEach(b => { b.onclick = () => { tabActiva = b.dataset.tab; pintarGrilla(); }; });
+    document.getElementById('barra-carrito').onclick = abrirCarrito;
+    const bd = document.getElementById('btn-deshacer');
+    if (bd) bd.onclick = () => deshacer().catch(e => mostrarError('deshacer venta', e));
+    pintarGrilla(); pintarBarra();
   }
 
   function referenciaStock(producto) {
