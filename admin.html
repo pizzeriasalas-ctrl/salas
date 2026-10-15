@@ -274,6 +274,52 @@ body{
 .bottom-nav button .ic{display:flex;transition:all .15s;padding:3px 16px}
 .pin-v{font-family:ui-monospace,monospace;letter-spacing:.2em;font-weight:700}
 .link{background:none;border:none;color:var(--accent);font-weight:700;font-size:.82rem;padding:6px}
+/* --- Reportes claros (Etapa 1) --- */
+:root{--up:#1f7a4d;--down:#b23a2e;--amber:#e0991a}
+[data-theme="dark"]{--up:#4cc38a;--down:#f07a6c;--amber:#f0b64a}
+.ttl{font-size:1.15rem;font-weight:800;margin-top:var(--space-6)!important;color:var(--text-primary)}
+.hero .chip.up{background:#1f7a4d}.hero .chip.down{background:#b23a2e}.hero .chip.eq{background:rgba(255,255,255,.25)}
+.hero .chip{font-size:.9rem;padding:6px 13px;position:relative;z-index:1}
+.hero .big{font-size:2.7rem}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.num{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:16px 14px;box-shadow:var(--shadow-sm)}
+.num.alerta{border-color:var(--down)}
+.num .l{font-size:.85rem;color:var(--text-secondary);font-weight:700}
+.num .v{font-size:1.9rem;font-weight:800;margin:4px 0 2px;letter-spacing:-.02em}
+.num .s{font-size:.78rem;color:var(--text-secondary)}
+.resumen .grande{font-size:2.1rem;font-weight:800;letter-spacing:-.02em;margin:2px 0}
+.frase{font-weight:700;font-size:.98rem}
+.frase.up{color:var(--up)}.frase.down{color:var(--down)}.frase.eq{color:var(--text-secondary)}
+.duo2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.duo2 b{font-size:1.25rem}
+.leyenda{margin-bottom:10px;display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.pt{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:middle}
+.pt.up{background:var(--up)}.pt.down{background:var(--down)}
+.fila{display:grid;grid-template-columns:62px 1fr auto;align-items:center;gap:10px;padding:8px 8px;border-radius:12px;border:2px solid transparent}
+.fila + .fila{margin-top:2px}
+.fila.hoy{background:var(--accent-light)}
+.fila.mejor{border-color:var(--amber)}
+.fila .nom{font-weight:800;font-size:.95rem}
+.fila .pista{height:22px;border-radius:8px;background:var(--surface-2);overflow:hidden}
+.fila.hoy .pista{background:var(--surface)}
+.fila .pista i{display:block;height:100%;border-radius:8px;transition:width .4s ease}
+.fila .pista i.up{background:var(--up)}.fila .pista i.down{background:var(--down)}
+.fila .pista i.eq{background:var(--text-secondary);opacity:.55}.fila .pista i.ac{background:var(--accent)}
+.fila .mon{font-weight:800;font-size:1rem;text-align:right;white-space:nowrap}
+.dona-wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center}
+.dona{width:150px;height:150px;flex-shrink:0}
+.dona-t1{font-size:11px;fill:var(--text-secondary);font-weight:700}
+.dona-t2{font-size:15px;fill:var(--text-primary);font-weight:800}
+.dona-leg{flex:1;min-width:140px;display:flex;flex-direction:column;gap:14px}
+.leg{display:flex;gap:10px;align-items:flex-start}
+.leg > i{width:16px;height:16px;border-radius:5px;margin-top:4px;flex-shrink:0}
+.leg .ln{font-weight:700;font-size:.95rem}
+.leg .lv{font-weight:800;font-size:1.35rem;letter-spacing:-.01em}
+.leg .lp{font-size:.82rem;color:var(--text-secondary)}
+.dona-frase{text-align:center;margin-top:12px;font-size:.92rem}
+.alerta-fila{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border)}
+.alerta-fila:first-child{border-top:none}
+.alerta-fila .pt{margin-top:5px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -853,51 +899,115 @@ async function pantallaEditarPrecios(s, compartimento, volver) {
 // 8d) PANTALLA: Reportes (hoy / 7 días / 30 días)
 // ============================================================
 let periodoRep = 'hoy';
+const DIAS_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+function nombreDia(iso, hoy) {
+  if (iso === hoy) return 'Hoy';
+  if (iso === sumarDias(hoy, -1)) return 'Ayer';
+  const [a, m, d] = iso.split('-').map(Number);
+  return DIAS_CORTO[new Date(a, m - 1, d).getDay()] + ' ' + d;
+}
+const bsN = x => Math.round(x).toLocaleString('es-BO') + ' Bs';
+// Frase simple de comparación: "Vendiste 120 Bs más que ayer"
+function comparar(actual, previo, ref, enCurso) {
+  const dif = actual - previo;
+  if (actual === 0 && previo === 0) return { txt: 'Todavía no hay ventas para comparar', cls: 'eq', ic: '＝' };
+  const ini = enCurso ? 'Hoy llevas ' : 'Vendiste ';
+  if (Math.abs(dif) < 0.5) return { txt: (enCurso ? 'Hoy llevas lo mismo que ' : 'Vendiste lo mismo que ') + ref, cls: 'eq', ic: '＝' };
+  return dif > 0
+    ? { txt: ini + bsN(dif) + ' más que ' + ref, cls: 'up', ic: '▲' }
+    : { txt: ini + bsN(-dif) + ' menos que ' + ref, cls: 'down', ic: '▼' };
+}
+// Dona simple (SVG, funciona sin internet). partes: [{n, v, color}]
+function dona(partes) {
+  const tot = partes.reduce((a, p) => a + p.v, 0);
+  const R = 52, C = 2 * Math.PI * R;
+  let off = 0;
+  const arcos = tot > 0 ? partes.filter(p => p.v > 0).map(p => {
+    const L = p.v / tot * C;
+    const s = `<circle cx="70" cy="70" r="${R}" fill="none" style="stroke:${p.color}" stroke-width="22" stroke-dasharray="${L.toFixed(2)} ${(C - L).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 70 70)"/>`;
+    off += L; return s;
+  }).join('') : '';
+  const p0 = tot > 0 ? Math.round(partes[0].v / tot * 100) : 0;
+  const pct = [p0, 100 - p0];
+  const mayor = tot > 0 ? (partes[0].v >= partes[1].v ? 0 : 1) : -1;
+  return `<div class="dona-wrap">
+    <svg class="dona" viewBox="0 0 140 140" role="img" aria-label="Gráfico circular">
+      <circle cx="70" cy="70" r="${R}" fill="none" style="stroke:var(--surface-2)" stroke-width="22"/>${arcos}
+      <text x="70" y="66" text-anchor="middle" class="dona-t1">${tot > 0 ? 'Total' : 'Sin'}</text>
+      <text x="70" y="86" text-anchor="middle" class="dona-t2">${tot > 0 ? bsN(tot) : 'ventas'}</text>
+    </svg>
+    <div class="dona-leg">${partes.map((p, i) => `<div class="leg"><i style="background:${p.color}"></i><div><div class="ln">${p.n}</div><div class="lv">${bsN(p.v)}</div><div class="lp">${tot > 0 ? pct[i] + '% del total' : '—'}</div></div></div>`).join('')}</div>
+  </div>${mayor >= 0 ? `<div class="t-secondary dona-frase">${pct[mayor] === 50 ? 'Quedaron parejos.' : 'Se vendió más en <b>' + partes[mayor].n + '</b> (' + pct[mayor] + '%).'}</div>` : ''}`;
+}
+
 async function pantallaReportes() {
   app.innerHTML = `<div class="empty-state">Calculando reportes…</div>`;
   let sucursales;
   try { sucursales = await cargarSucursalesConCaja(); } catch (e) { return mostrarError('cargar reportes', e); }
   const n = { hoy: 1, '7': 7, '30': 30 }[periodoRep];
-  const hoy = hoyISO(), ini = sumarDias(hoy, -(n - 1)), iniPrev = sumarDias(hoy, -(2 * n - 1)), finPrev = sumarDias(hoy, -n);
+  const hoy = hoyISO(), ayer = sumarDias(hoy, -1), ini = sumarDias(hoy, -(n - 1)), iniPrev = sumarDias(hoy, -(2 * n - 1)), finPrev = sumarDias(hoy, -n);
+  const desde = iniPrev < sumarDias(hoy, -6) ? iniPrev : sumarDias(hoy, -6); // siempre al menos 7 días para detectar días flojos
   const V = [], G = [], T = [];
   sucursales.forEach(s => compsDe(s).forEach(c => {
     const base = db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c);
-    T.push(base.collection('ventas').where('fecha', '>=', iniPrev).get().then(q => q.docs.forEach(d => V.push({ ...d.data(), sid: s.id }))));
-    T.push(base.collection('gastos').where('fecha', '>=', iniPrev).get().then(q => q.docs.forEach(d => G.push({ ...d.data(), sid: s.id }))));
+    T.push(base.collection('ventas').where('fecha', '>=', desde).get().then(q => q.docs.forEach(d => V.push({ ...d.data(), sid: s.id, comp: c }))));
+    T.push(base.collection('gastos').where('fecha', '>=', desde).get().then(q => q.docs.forEach(d => G.push({ ...d.data(), sid: s.id, comp: c }))));
   }));
   try { await conTiempoLimite(Promise.all(T), 25000, 'calcular reportes'); } catch (e) { return mostrarError('calcular reportes', e); }
 
-  const act = V.filter(v => v.fecha >= ini), prev = V.filter(v => v.fecha >= iniPrev && v.fecha <= finPrev);
   const suma = (l, k) => l.reduce((a, x) => a + (x[k] || 0), 0);
+  const act = V.filter(v => v.fecha >= ini), prev = V.filter(v => v.fecha >= iniPrev && v.fecha <= finPrev);
   const total = suma(act, 'monto'), totalPrev = suma(prev, 'monto');
   const efectivo = suma(act.filter(v => v.formaPago === 'efectivo'), 'monto'), qr = total - efectivo;
+  const pizza = suma(act.filter(v => v.comp === 'pizzeria'), 'monto'), salte = suma(act.filter(v => v.comp === 'salteneria'), 'monto');
   const gastos = suma(G.filter(g => g.fecha >= ini), 'monto');
-  const delta = totalPrev > 0 ? (total - totalPrev) / totalPrev * 100 : (total > 0 ? 100 : 0);
   const cajaGeneral = sucursales.reduce((a, s) => a + s._cajaTotal, 0);
   const agotados = sucursales.reduce((a, s) => a + s._stockBajo, 0);
   const unidades = suma(act, 'cantidad');
 
-  // gráfico
-  let barras = [];
-  if (n === 1) {
-    for (let h = 8; h <= 21; h++) barras.push({ l: h % 2 === 0 ? h : '', v: 0, t: h + ':00' });
-    act.forEach(v => { if (v.creadoEn && v.creadoEn.toDate) { const h = v.creadoEn.toDate().getHours(); if (h >= 8 && h <= 21) barras[h - 8].v += v.monto; } });
-  } else {
-    for (let i = 0; i < n; i++) { const f = sumarDias(ini, i); barras.push({ l: (n === 7 || i % 5 === 0) ? f.slice(8) : '', v: 0, f, t: f.slice(8) + '/' + f.slice(5, 7) }); }
-    act.forEach(v => { const b = barras.find(x => x.f === v.fecha); if (b) b.v += v.monto; });
-  }
-  const maxB = Math.max(1, ...barras.map(b => b.v));
+  // ---- Resumen de HOY (siempre) ----
+  const ventasHoy = suma(V.filter(v => v.fecha === hoy), 'monto'), ventasAyer = suma(V.filter(v => v.fecha === ayer), 'monto');
+  const gananciaHoy = ventasHoy - suma(G.filter(g => g.fecha === hoy), 'monto');
+  const cmpHoy = comparar(ventasHoy, ventasAyer, 'ayer', true);
 
-  // por sucursal y productos
+  // ---- Días flojos (últimos 6 días antes de hoy) ----
+  const porDia = {};
+  V.forEach(v => { porDia[v.fecha] = (porDia[v.fecha] || 0) + (v.monto || 0); });
+  const previos = [];
+  for (let i = 1; i <= 6; i++) { const f = sumarDias(hoy, -i); if ((porDia[f] || 0) > 0) previos.push({ f, v: porDia[f] }); }
+  const prom = previos.length ? previos.reduce((a, x) => a + x.v, 0) / previos.length : 0;
+  const flojos = previos.length >= 3 ? previos.filter(x => x.v < prom * 0.5) : [];
+  const nAlertas = agotados + flojos.length;
+
+  // ---- Gráfico principal ----
+  let filas = [], tituloGr, subGr = '', sinHora = 0;
+  if (n === 1) {
+    tituloGr = '¿A qué hora vendimos más hoy?';
+    const h = {};
+    act.forEach(v => { if (v.creadoEn && v.creadoEn.toDate) { const k = v.creadoEn.toDate().getHours(); h[k] = (h[k] || 0) + v.monto; } else sinHora += v.monto || 0; });
+    filas = Object.keys(h).map(Number).sort((a, b) => a - b).map(k => ({ nom: k + ':00', v: h[k], hoy: false }));
+  } else {
+    tituloGr = '¿Cuánto vendimos cada día?';
+    subGr = '<span class="pt up"></span> Más que el día anterior &nbsp; <span class="pt down"></span> Menos';
+    for (let i = n - 1; i >= 0; i--) { // el más reciente arriba
+      const f = sumarDias(hoy, -i), v = porDia[f] || 0, p = porDia[sumarDias(f, -1)];
+      filas.push({ nom: nombreDia(f, hoy), v, hoy: f === hoy, cls: p === undefined || v === p ? 'eq' : (v > p ? 'up' : 'down') });
+    }
+  }
+  const maxF = Math.max(1, ...filas.map(x => x.v));
+  const mejor = filas.length > 1 && maxF > 1 ? filas.findIndex(x => x.v === maxF) : -1;
+
+  // ---- Sucursales y productos ----
   const porSuc = sucursales.map(s => ({ s, v: suma(act.filter(x => x.sid === s.id), 'monto'), p: suma(prev.filter(x => x.sid === s.id), 'monto') })).sort((a, b) => b.v - a.v);
   const maxS = Math.max(1, ...porSuc.map(x => x.v));
   const prod = {};
   act.forEach(v => { const p = prod[v.producto] = prod[v.producto] || { q: 0, m: 0 }; p.q += v.cantidad || 1; p.m += v.monto; });
   const top = Object.entries(prod).sort((a, b) => b[1].m - a[1].m).slice(0, 6);
   const maxP = Math.max(1, ...top.map(x => x[1].m));
-  const etiqueta = { hoy: 'hoy', '7': 'últimos 7 días', '30': 'últimos 30 días' }[periodoRep];
-  const vs = { hoy: 'ayer', '7': '7 días previos', '30': '30 días previos' }[periodoRep];
-  const bs = x => x.toLocaleString('es-BO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' Bs';
+  const etiqueta = { hoy: 'hoy', '7': 'los últimos 7 días', '30': 'los últimos 30 días' }[periodoRep];
+  const vs = { hoy: 'ayer', '7': 'los 7 días anteriores', '30': 'los 30 días anteriores' }[periodoRep];
+  const cmpPer = comparar(total, totalPrev, vs, false);
+  const bs = bsN;
 
   function render() {
     app.innerHTML = `
@@ -909,38 +1019,70 @@ async function pantallaReportes() {
         <button class="header-btn" id="btn-tema">${ic('palette')}</button>
       </div>
       <div class="content">
-        <div class="seg" id="seg">${[['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']].map(p => `<button data-p="${p[0]}" class="${periodoRep === p[0] ? 'on' : ''}">${p[1]}</button>`).join('')}</div>
         <div class="hero">
-          <div class="lbl">Ventas · ${etiqueta}</div>
-          <div class="big">${total.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs</div>
-          <span class="chip">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(0)}% vs ${vs} (${bs(totalPrev)})</span>
+          <div class="lbl">Ventas de hoy</div>
+          <div class="big">${bs(ventasHoy)}</div>
+          <span class="chip ${cmpHoy.cls}">${cmpHoy.ic} ${cmpHoy.txt}</span>
         </div>
-        <div class="kpis">
-          <div class="kpi"><div class="l">${ic('cash', 14)} Efectivo</div><div class="v">${bs(efectivo)}</div></div>
-          <div class="kpi"><div class="l">${ic('phone', 14)} QR</div><div class="v">${bs(qr)}</div></div>
-          <div class="kpi"><div class="l">Gastos</div><div class="v">${bs(gastos)}</div></div>
-          <div class="kpi"><div class="l">Ganancia</div><div class="v" style="color:${total - gastos >= 0 ? 'var(--success)' : 'var(--danger)'}">${bs(total - gastos)}</div></div>
-          <div class="kpi"><div class="l">${ic('wallet', 14)} Caja general</div><div class="v">${bs(cajaGeneral)}</div></div>
-          <div class="kpi" style="${agotados ? 'border-color:var(--danger)' : ''}"><div class="l">${ic('box', 14)} Agotados</div><div class="v">${agotados}</div></div>
+        <div class="duo">
+          <div class="num"><div class="l">Ganancia de hoy</div><div class="v" style="color:${gananciaHoy >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(gananciaHoy)}</div><div class="s">Ventas menos gastos</div></div>
+          <div class="num ${nAlertas ? 'alerta' : ''}" id="ir-alertas" style="cursor:pointer;"><div class="l">Alertas</div><div class="v" style="color:${nAlertas ? 'var(--down)' : 'var(--up)'}">${nAlertas ? nAlertas : '✔'}</div><div class="s">${nAlertas ? 'Toca para ver' : 'Todo en orden'}</div></div>
         </div>
-        <div class="sec">${n === 1 ? 'Ventas por hora' : 'Ventas por día'}</div>
+
+        <div class="ttl">Ver el detalle de</div>
+        <div class="seg" id="seg">${[['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días']].map(p => `<button data-p="${p[0]}" class="${periodoRep === p[0] ? 'on' : ''}">${p[1]}</button>`).join('')}</div>
+
+        ${n > 1 ? `<div class="card resumen">
+          <div class="t-secondary">Ventas de ${etiqueta}</div>
+          <div class="grande">${bs(total)}</div>
+          <div class="frase ${cmpPer.cls}">${cmpPer.ic} ${cmpPer.txt}</div>
+          <div class="duo2"><div><div class="t-secondary">Gastos</div><b>${bs(gastos)}</b></div><div><div class="t-secondary">Ganancia</div><b style="color:${total - gastos >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(total - gastos)}</b></div></div>
+          <div class="t-secondary" style="margin-top:8px;">${unidades} producto(s) vendidos en ${act.length} venta(s)</div>
+        </div>` : ''}
+
+        <div class="ttl">${tituloGr}</div>
         <div class="card">
-          <div class="chart-bars gr">${barras.map(b => `<div class="bar-col" title="${b.t}: ${b.v.toFixed(0)} Bs"><div class="bar ${b.v > 0 ? 'filled' : ''}" style="height:${Math.max(3, b.v / maxB * 100)}%"></div><div class="bar-lbl">${b.l}</div></div>`).join('')}</div>
-          <div class="t-secondary" style="margin-top:8px;">${unidades} producto(s) vendidos · ${act.length} venta(s)</div>
+          ${subGr ? `<div class="t-secondary leyenda">${subGr}</div>` : ''}
+          ${filas.length === 0 || maxF <= 1 && filas.every(x => x.v === 0) ? `<div class="empty-state" style="padding:18px 0;">Todavía no hay ventas ${n === 1 ? 'hoy' : 'en este período'}.</div>` : filas.map((f, i) => `
+            <div class="fila ${f.hoy ? 'hoy' : ''} ${i === mejor ? 'mejor' : ''}">
+              <div class="nom">${f.nom}</div>
+              <div class="pista"><i class="${n === 1 ? (i === mejor ? 'up' : 'ac') : f.cls}" style="width:${f.v / maxF * 100}%"></i></div>
+              <div class="mon">${i === mejor ? '⭐ ' : ''}${bs(f.v)}</div>
+            </div>`).join('')}
+          ${mejor >= 0 ? `<div class="t-secondary" style="margin-top:8px;">⭐ ${n === 1 ? 'La mejor hora fue las ' + filas[mejor].nom : 'El mejor día fue ' + (filas[mejor].nom === 'Hoy' || filas[mejor].nom === 'Ayer' ? filas[mejor].nom.toLowerCase() : filas[mejor].nom)}, con ${bs(maxF)}.</div>` : ''}
+          ${sinHora > 0 ? `<div class="t-secondary" style="margin-top:4px;">Además, ${bs(sinHora)} se están sincronizando y aún no tienen hora.</div>` : ''}
         </div>
-        <div class="sec">Ranking de sucursales</div>
+
+        <div class="ttl">¿Cómo nos pagaron? (${etiqueta})</div>
+        <div class="card">${dona([{ n: 'Efectivo', v: efectivo, color: 'var(--accent)' }, { n: 'QR', v: qr, color: 'var(--amber)' }])}</div>
+
+        <div class="ttl">¿Qué área vendió más? (${etiqueta})</div>
+        <div class="card">${dona([{ n: 'Pizzería', v: pizza, color: 'var(--accent)' }, { n: 'Salteñería', v: salte, color: 'var(--amber)' }])}</div>
+
+        <div class="ttl">¿Qué sucursal vendió más?</div>
         ${porSuc.length === 0 ? `<div class="empty-state">Todavía no hay sucursales.</div>` : porSuc.map((x, i) => {
-          const d = x.p > 0 ? (x.v - x.p) / x.p * 100 : (x.v > 0 ? 100 : 0);
-          return `<div class="card" data-suc="${x.s.id}" style="cursor:pointer;"><div class="rank"><div class="n">${i + 1}</div><div class="grow"><div class="row"><b>${esc(x.s.nombre)}</b><b>${bs(x.v)}</b></div>
+          const c = comparar(x.v, x.p, vs, false);
+          return `<div class="card" data-suc="${x.s.id}" style="cursor:pointer;"><div class="rank"><div class="n">${i + 1}</div><div class="grow"><div class="row"><b style="font-size:1.02rem;">${esc(x.s.nombre)}</b><b style="font-size:1.02rem;white-space:nowrap;">${bs(x.v)}</b></div>
             <div class="prog"><i style="width:${x.v / maxS * 100}%"></i></div>
-            <div class="row t-secondary" style="margin-top:6px;"><span>Caja ${bs(x.s._cajaTotal)}${x.s._stockBajo ? ' · ' + x.s._stockBajo + ' agotado(s)' : ''}</span><span class="badge ${d >= 0 ? 'badge-success' : 'badge-danger'}">${d >= 0 ? '+' : ''}${d.toFixed(0)}%</span></div></div></div></div>`;
+            <div class="frase ${c.cls}" style="margin-top:7px;font-size:.88rem;">${c.ic} ${c.txt}</div>
+            <div class="t-secondary" style="margin-top:3px;">Caja: ${bs(x.s._cajaTotal)}${x.s._stockBajo ? ' · ' + x.s._stockBajo + ' agotado(s)' : ''}</div></div></div></div>`;
         }).join('')}
-        ${top.length ? `<div class="sec">Lo más vendido</div><div class="card">${top.map((p, i) => `<div style="${i ? 'margin-top:12px;' : ''}"><div class="row"><span class="t-body">${esc(p[0])} <span class="t-secondary">· ${p[1].q} und.</span></span><b>${bs(p[1].m)}</b></div><div class="prog"><i style="width:${p[1].m / maxP * 100}%"></i></div></div>`).join('')}</div>` : ''}
+
+        ${top.length ? `<div class="ttl">¿Qué se vendió más?</div><div class="card">${top.map((p, i) => `<div style="${i ? 'margin-top:14px;' : ''}"><div class="row"><span style="font-size:1rem;font-weight:700;">${esc(p[0])} <span class="t-secondary">· ${p[1].q} und.</span></span><b style="font-size:1rem;white-space:nowrap;margin-left:8px;">${bs(p[1].m)}</b></div><div class="prog"><i style="width:${p[1].m / maxP * 100}%"></i></div></div>`).join('')}</div>` : ''}
+
+        <div class="ttl" id="sec-alertas">Alertas</div>
+        <div class="card">
+          ${nAlertas === 0 ? `<div class="frase up" style="font-size:1rem;">✔ Todo en orden. No hay productos agotados ni días flojos.</div>` : ''}
+          ${sucursales.filter(s => s._stockBajo > 0).map(s => `<div class="alerta-fila"><span class="pt down"></span><div><b>${esc(s.nombre)}</b><div class="t-secondary">${s._stockBajo} producto(s) agotado(s)</div></div></div>`).join('')}
+          ${flojos.map(x => `<div class="alerta-fila"><span class="pt down"></span><div><b>${nombreDia(x.f, hoy)}: vendieron poco</b><div class="t-secondary">${bs(x.v)} (lo normal son unos ${bs(prom)} por día)</div></div></div>`).join('')}
+          <div class="t-secondary" style="margin-top:8px;">Caja general (todas las sucursales): <b>${bs(cajaGeneral)}</b></div>
+        </div>
       </div>
       ${navInferiorAdmin('reportes')}`;
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
     document.querySelectorAll('#seg button').forEach(b => { b.onclick = () => { periodoRep = b.dataset.p; pantallaReportes(); }; });
     document.querySelectorAll('[data-suc]').forEach(el => { el.onclick = () => pantallaDetalleSucursal(sucursales.find(x => x.id === el.dataset.suc)); });
+    document.getElementById('ir-alertas').onclick = () => { const e = document.getElementById('sec-alertas'); if (e) e.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
     wireNavInferiorAdmin();
   }
   render();
