@@ -979,6 +979,47 @@ async function pantallaAccesos() {
 // ============================================================
 // 8f) PANTALLA: Datos (historial completo → Excel)
 // ============================================================
+// Genera un .xlsx real (zip sin compresión), sin librerías externas
+function crearXlsx(filas) {
+  const enc = new TextEncoder();
+  const col = i => String.fromCharCode(65 + i);
+  const x = t => String(t == null ? '' : t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const rows = filas.map((f, r) => '<row r="' + (r + 1) + '">' + f.map((v, i) => {
+    const ref = col(i) + (r + 1);
+    if (typeof v === 'number' && isFinite(v)) return '<c r="' + ref + '"><v>' + v + '</v></c>';
+    return '<c r="' + ref + '" t="inlineStr"' + (r === 0 ? ' s="1"' : '') + '><is><t>' + x(v) + '</t></is></c>';
+  }).join('') + '</row>').join('');
+  const H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const arch = [
+    ['[Content_Types].xml', H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+    ['_rels/.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', H + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Historial" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', H + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml', H + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>'],
+    ['xl/worksheets/sheet1.xml', H + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="2" width="12" customWidth="1"/><col min="3" max="5" width="18" customWidth="1"/><col min="6" max="6" width="38" customWidth="1"/><col min="7" max="10" width="13" customWidth="1"/></cols><sheetData>' + rows + '</sheetData></worksheet>']
+  ];
+  const T = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
+  const crc = d => { let c = 0xFFFFFFFF; for (let i = 0; i < d.length; i++) c = T[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const partes = [], central = []; let pos = 0;
+  arch.forEach(([nom, txt]) => {
+    const n = enc.encode(nom), d = enc.encode(txt), cr = crc(d);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint32(14, cr, true); lh.setUint32(18, d.length, true); lh.setUint32(22, d.length, true); lh.setUint16(26, n.length, true);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint32(16, cr, true); ch.setUint32(20, d.length, true); ch.setUint32(24, d.length, true); ch.setUint16(28, n.length, true); ch.setUint32(42, pos, true);
+    partes.push(new Uint8Array(lh.buffer), n, d); central.push(new Uint8Array(ch.buffer), n);
+    pos += 30 + n.length + d.length;
+  });
+  const tamC = central.reduce((a, p) => a + p.length, 0);
+  const fin = new DataView(new ArrayBuffer(22));
+  fin.setUint32(0, 0x06054b50, true); fin.setUint16(8, arch.length, true); fin.setUint16(10, arch.length, true); fin.setUint32(12, tamC, true); fin.setUint32(16, pos, true);
+  const todo = partes.concat(central, [new Uint8Array(fin.buffer)]);
+  const out = new Uint8Array(pos + tamC + 22); let o = 0; todo.forEach(p => { out.set(p, o); o += p.length; });
+  return out;
+}
+
 let rangoDatos = 'mes', sucDatos = 'todas';
 async function pantallaDatos() {
   app.innerHTML = `<div class="empty-state">Cargando…</div>`;
@@ -995,7 +1036,7 @@ async function pantallaDatos() {
           <button class="btn btn-primary" id="btn-excel">${ic('down', 18)} Descargar Excel</button>
           <div class="error-text" id="datos-msg"></div>
         </div>
-        <div class="t-secondary" style="text-align:center;">Incluye ventas, gastos, bajas y retiros de caja.</div>
+        <div class="t-secondary" style="text-align:center;">Archivo Excel (.xlsx) con ventas, gastos, bajas y retiros de caja.</div>
       </div>
       ${navInferiorAdmin('datos')}`;
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
@@ -1026,11 +1067,10 @@ async function pantallaDatos() {
     if (!filas.length) { msg.textContent = 'No hay movimientos en ese período.'; return; }
     filas.sort((a, b) => (b[0] + b[1]).localeCompare(a[0] + a[1]));
     const cab = ['Fecha', 'Hora', 'Sucursal', 'Área', 'Tipo', 'Detalle', 'Cantidad', 'Precio unit.', 'Monto Bs', 'Pago'];
-    const html = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body><table border="1"><tr>' + cab.map(h => '<th style="background:#eee">' + h + '</th>').join('') + '</tr>' +
-      filas.map(f => '<tr>' + f.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</table></body></html>';
+    const bytes = crearXlsx([cab].concat(filas));
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' }));
-    a.download = 'salas-historial-' + hoy + '.xls';
+    a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = 'salas-historial-' + hoy + '.xlsx';
     document.body.appendChild(a); a.click(); a.remove();
     msg.textContent = filas.length + ' movimientos exportados.';
   }
