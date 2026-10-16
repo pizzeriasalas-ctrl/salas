@@ -588,10 +588,28 @@ function productosDe(compartimento, s, sinExtras) {
   return lista;
 }
 
+
+// ---- Alertas de stock bajo (configurables por la dueña) ----
+let ALERTAS = { general: 0, por: {} }; // general: avisar con N o menos; por[id]: N, o -1 = sin alerta
+async function cargarAlertas() {
+  try {
+    const d = await conTiempoLimite(db.collection('config').doc('alertas').get(), 10000, 'cargar alertas');
+    const x = d.exists ? d.data() : {};
+    ALERTAS = { general: Number.isFinite(x.umbralGeneral) ? x.umbralGeneral : 0, por: x.umbrales || {} };
+  } catch (e) { /* sin permiso o sin internet: se usa el valor por defecto (avisar solo al agotarse) */ }
+}
+function umbralDe(id) {
+  const v = ALERTAS.por[id];
+  if (v === -1) return null;
+  return Number.isFinite(v) ? v : ALERTAS.general;
+}
+function esBajo(id, cantidad) { const u = umbralDe(id); return u !== null && cantidad <= u; }
+
 async function cargarSucursalesConCaja() {
   const snap = await conTiempoLimite(db.collection('sucursales').where('activo', '==', true).get(), 15000, 'cargar sucursales');
   const sucursales = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   sucursales.sort((a, b) => (a.orden || 99) - (b.orden || 99));
+  await cargarAlertas();
   // Para cada sucursal, traemos la caja acumulada de sus compartimentos
   await Promise.all(sucursales.map(async (s) => {
     const comps = compsDe(s);
@@ -601,10 +619,11 @@ async function cargarSucursalesConCaja() {
       db.collection('sucursales').doc(s.id).collection('stockRefrescos').get()
     ]);
     s._cajaTotal = docs.reduce((a, d) => a + (d.exists ? (d.data().cajaTotal || 0) : 0), 0);
-    let agotados = 0;
-    stockSnaps.forEach(snapStock => snapStock.forEach(doc => { if ((doc.data().cantidad || 0) <= 0) agotados++; }));
-    refrescosSnap.forEach(doc => { if ((doc.data().cantidad || 0) <= 0) agotados++; });
-    s._stockBajo = agotados;
+    const items = [];
+    stockSnaps.forEach((snapStock, i) => snapStock.forEach(doc => items.push({ id: doc.id, nombre: doc.data().producto || doc.id, cantidad: doc.data().cantidad || 0, grupo: comps[i] })));
+    refrescosSnap.forEach(doc => items.push({ id: doc.id, nombre: doc.data().producto || doc.id, cantidad: doc.data().cantidad || 0, grupo: 'refrescos' }));
+    s._stockItems = items;
+    s._stockBajo = items.filter(x => esBajo(x.id, x.cantidad)).length;
   }));
   return sucursales;
 }
@@ -648,6 +667,61 @@ function guardarProducto(id, datos) {
   return noEsperar(db.collection('productos').doc(id).set(datos, { merge: true }));
 }
 
+async function pantallaAlertas() {
+  app.innerHTML = `<div class="empty-state">Cargando productos…</div>`;
+  let sucursales;
+  try { sucursales = await cargarSucursalesConCaja(); } catch (e) { return mostrarError('cargar alertas de stock', e); }
+  const items = new Map();
+  sucursales.forEach(s => (s._stockItems || []).forEach(x => { if (!items.has(x.id)) items.set(x.id, x.nombre); }));
+  const lista = [...items].sort((a, b) => a[1].localeCompare(b[1]));
+  const NIVELES = [1, 2, 3, 5, 10];
+  const guardar = datos => noEsperar(db.collection('config').doc('alertas').set(datos, { merge: true }));
+  function render() {
+    app.innerHTML = `
+      <div class="header"><button class="header-btn" id="btn-atras">${ic('back')}</button><div class="t-subtitle">Alertas de stock bajo</div><div style="width:38px;"></div></div>
+      <div class="px stack">
+        <div class="card">
+          <div class="field"><label>Avisar cuando un producto tenga</label>
+            <select id="sel-general">
+              <option value="0" ${ALERTAS.general === 0 ? 'selected' : ''}>0 (solo cuando se agota)</option>
+              ${NIVELES.map(n => `<option value="${n}" ${ALERTAS.general === n ? 'selected' : ''}>${n} o menos</option>`).join('')}
+            </select>
+          </div>
+          <div class="t-secondary" style="margin-top:6px;">Vale para todos los productos que no tengan una regla propia.</div>
+        </div>
+        <div class="t-eyebrow">Regla por producto (${lista.length})</div>
+        ${lista.length === 0 ? `<div class="card"><div class="t-secondary">Todavía no hay stock registrado en ninguna sucursal.</div></div>` : `<div class="card">${lista.map(([id, nombre]) => {
+          const v = ALERTAS.por[id];
+          return `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);gap:10px;">
+            <span class="t-body" style="flex:1;">${esc(nombre)}</span>
+            <select data-id="${esc(id)}" style="max-width:48%;">
+              <option value="" ${v == null ? 'selected' : ''}>General (${ALERTAS.general})</option>
+              <option value="x" ${v === -1 ? 'selected' : ''}>Sin alerta</option>
+              <option value="0" ${v === 0 ? 'selected' : ''}>Solo al agotarse</option>
+              ${NIVELES.map(n => `<option value="${n}" ${v === n ? 'selected' : ''}>${n} o menos</option>`).join('')}
+            </select>
+          </div>`;
+        }).join('')}</div>`}
+      </div>
+      ${navInferiorAdmin('productos')}`;
+    document.getElementById('btn-atras').onclick = () => pantallaProductos();
+    document.getElementById('sel-general').onchange = e => {
+      ALERTAS.general = parseInt(e.target.value, 10);
+      guardar({ umbralGeneral: ALERTAS.general });
+      render();
+    };
+    document.querySelectorAll('select[data-id]').forEach(sel => {
+      sel.onchange = () => {
+        const id = sel.dataset.id, val = sel.value;
+        if (val === '') { delete ALERTAS.por[id]; guardar({ umbrales: { [id]: firebase.firestore.FieldValue.delete() } }); }
+        else { const n = val === 'x' ? -1 : parseInt(val, 10); ALERTAS.por[id] = n; guardar({ umbrales: { [id]: n } }); }
+      };
+    });
+    wireNavInferiorAdmin();
+  }
+  render();
+}
+
 async function pantallaProductos() {
   app.innerHTML = `<div class="empty-state">Cargando productos…</div>`;
   try { await cargarCatalogo(); } catch (e) { return mostrarError('cargar los productos', e); }
@@ -659,6 +733,7 @@ async function pantallaProductos() {
       <div class="header"><div><div class="t-title" style="font-size:1.3rem;">Productos</div><div class="t-secondary">Lo que se vende en las apps</div></div><button class="header-btn" id="btn-tema">${ic('palette')}</button></div>
       <div class="px stack">
         <button class="btn btn-primary" id="btn-nuevo-prod">+ Agregar producto</button>
+        <button class="btn btn-secondary" id="btn-alertas">Alertas de stock bajo</button>
         <div class="t-eyebrow">Productos agregados (${nuevos.length})</div>
         ${nuevos.length === 0 ? `<div class="card"><div class="t-secondary">Todavía no agregaste productos. Toca "+ Agregar producto".</div></div>` : nuevos.map(p => `
           <div class="card">
@@ -674,6 +749,7 @@ async function pantallaProductos() {
       ${navInferiorAdmin('productos')}`;
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
     document.getElementById('btn-nuevo-prod').onclick = () => pantallaFormProducto(null);
+    document.getElementById('btn-alertas').onclick = () => pantallaAlertas();
     wireNavInferiorAdmin();
     document.querySelectorAll('[data-editar]').forEach(b => { b.onclick = () => pantallaFormProducto(CATALOGO.find(p => p.id === b.dataset.editar)); });
     document.querySelectorAll('[data-vis]').forEach(b => { b.onclick = () => { const p = CATALOGO.find(x => x.id === b.dataset.vis); guardarProducto(p.id, { activo: p.activo === false }); render(); }; });
@@ -743,7 +819,7 @@ async function pantallaPanel() {
             <div class="avatar">${ic('store',20)}</div>
             <div class="info">
               <div class="nombre">Sucursal ${s.orden || i + 1} · ${s.nombre}</div>
-              <div class="zona">${s.zona || 'Sucursal'} · Caja: ${s._cajaTotal.toFixed(2)} Bs${s._stockBajo > 0 ? ` · ${s._stockBajo} agotado(s)` : ''}</div>
+              <div class="zona">${s.zona || 'Sucursal'} · Caja: ${s._cajaTotal.toFixed(2)} Bs${s._stockBajo > 0 ? ` · ${s._stockBajo} con stock bajo` : ''}</div>
             </div>
             <div class="arrow">›</div>
           </div>
@@ -1259,7 +1335,7 @@ async function pantallaReportes() {
             <div class="frase ${c.cls}" style="margin-top:7px;font-size:.88rem;">${c.ic} ${c.txt}</div>
             <div class="sa sa-h"><span>Área</span><span>Ventas</span><span>Ganancia</span></div>
             ${compsDe(x.s).map(cc => { const a = areaDe(cc, x.s.id); return `<div class="sa"><span><i style="background:${cc === 'pizzeria' ? 'var(--accent)' : 'var(--amber)'}"></i>${NOM_AREA[cc]}</span><b>${bs(a.v)}</b><b style="color:${a.gan >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(a.gan)}</b></div>`; }).join('')}
-            <div class="t-secondary" style="margin-top:3px;">Caja: ${bs(x.s._cajaTotal)}${x.s._stockBajo ? ' · ' + x.s._stockBajo + ' agotado(s)' : ''}</div>
+            <div class="t-secondary" style="margin-top:3px;">Caja: ${bs(x.s._cajaTotal)}${x.s._stockBajo ? ' · ' + x.s._stockBajo + ' con stock bajo' : ''}</div>
             <div style="margin-top:6px;font-weight:800;color:var(--accent);font-size:.88rem;">Toca para ver sus ventas y gastos ›</div></div></div></div>`;
         }).join('')}
 
@@ -1267,8 +1343,8 @@ async function pantallaReportes() {
 
         <div class="ttl" id="sec-alertas">Alertas</div>
         <div class="card">
-          ${nAlertas === 0 ? `<div class="frase up" style="font-size:1rem;">✔ Todo en orden. No hay productos agotados ni días flojos.</div>` : ''}
-          ${sucursales.filter(s => s._stockBajo > 0).map(s => `<div class="alerta-fila"><span class="pt down"></span><div><b>${esc(s.nombre)}</b><div class="t-secondary">${s._stockBajo} producto(s) agotado(s)</div></div></div>`).join('')}
+          ${nAlertas === 0 ? `<div class="frase up" style="font-size:1rem;">✔ Todo en orden. No hay stock bajo ni días flojos.</div>` : ''}
+          ${sucursales.filter(s => s._stockBajo > 0).map(s => `<div class="alerta-fila"><span class="pt down"></span><div><b>${esc(s.nombre)}</b><div class="t-secondary">${s._stockBajo} producto(s) con stock bajo</div></div></div>`).join('')}
           ${flojos.map(x => `<div class="alerta-fila"><span class="pt down"></span><div><b>${nombreDia(x.f, hoy)}: vendieron poco</b><div class="t-secondary">${bs(x.v)} (lo normal son unos ${bs(prom)} por día)</div></div></div>`).join('')}
           <div class="t-secondary" style="margin-top:8px;">Caja general (todas las sucursales): <b>${bs(cajaGeneral)}</b></div>
         </div>
@@ -1310,9 +1386,10 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
   }
   let stock = [];
   async function traerStock() {
+    await cargarAlertas();
     const out = [], T = [];
-    comps.forEach(c => T.push(base(c).collection('stock').get().then(sn => sn.docs.forEach(d => out.push({ nombre: d.data().producto || d.id, cantidad: d.data().cantidad || 0, grupo: c })))));
-    T.push(db.collection('sucursales').doc(s.id).collection('stockRefrescos').get().then(sn => sn.docs.forEach(d => out.push({ nombre: d.data().producto || d.id, cantidad: d.data().cantidad || 0, grupo: 'refrescos' }))));
+    comps.forEach(c => T.push(base(c).collection('stock').get().then(sn => sn.docs.forEach(d => out.push({ id: d.id, nombre: d.data().producto || d.id, cantidad: d.data().cantidad || 0, grupo: c })))));
+    T.push(db.collection('sucursales').doc(s.id).collection('stockRefrescos').get().then(sn => sn.docs.forEach(d => out.push({ id: d.id, nombre: d.data().producto || d.id, cantidad: d.data().cantidad || 0, grupo: 'refrescos' }))));
     await conTiempoLimite(Promise.all(T), 20000, 'cargar stock');
     stock = out;
   }
@@ -1333,12 +1410,12 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
     const NG = { pizzeria: 'Pizzería', salteneria: 'Salteñería', refrescos: 'Refrescos (compartidos)' };
     const vis = stock.filter(x => area === 'todo' || x.grupo === area || x.grupo === 'refrescos');
     if (vis.length === 0) return `<div class="empty-state" style="padding:14px 0;">Todavía no hay stock registrado.</div>`;
-    const ago = vis.filter(x => x.cantidad <= 0).length;
+    const ago = vis.filter(x => esBajo(x.id, x.cantidad)).length;
     const orden = ['pizzeria', 'salteneria', 'refrescos'].filter(g => vis.some(x => x.grupo === g));
-    return (ago ? `<div class="frase down" style="margin-bottom:6px;">▼ ${ago} producto(s) agotado(s)</div>` : `<div class="frase up" style="margin-bottom:6px;">✔ No hay productos agotados</div>`) +
+    return (ago ? `<div class="frase down" style="margin-bottom:6px;">▼ ${ago} producto(s) con stock bajo</div>` : `<div class="frase up" style="margin-bottom:6px;">✔ No hay stock bajo</div>`) +
       orden.map(g => `<div class="stk-g">${NG[g]}</div>` + vis.filter(x => x.grupo === g).sort((a, b) => a.cantidad - b.cantidad || a.nombre.localeCompare(b.nombre)).map(x => {
-        const cls = x.cantidad <= 0 ? 'cero' : x.cantidad <= 3 ? 'poco' : '';
-        return `<div class="stk"><div class="mt">${esc(x.nombre)}</div><div class="q ${cls}">${x.cantidad <= 0 ? 'Agotado' : x.cantidad + (x.cantidad <= 3 ? ' · quedan pocos' : '')}</div></div>`;
+        const bajo = esBajo(x.id, x.cantidad), cls = bajo ? (x.cantidad <= 0 ? 'cero' : 'poco') : '';
+        return `<div class="stk"><div class="mt">${esc(x.nombre)}</div><div class="q ${cls}">${x.cantidad <= 0 ? 'Agotado' : x.cantidad + (bajo ? ' · stock bajo' : '')}</div></div>`;
       }).join('')).join('');
   }
 
