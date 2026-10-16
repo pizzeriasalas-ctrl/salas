@@ -259,10 +259,11 @@ body{
 .kpi .kl{font-size:.78rem;font-weight:600;opacity:.85;margin-top:2px}
 .kpi.main{background:linear-gradient(135deg,var(--accent),hsl(calc(var(--hue) + 28) 68% 44%));color:#fff;box-shadow:var(--shadow-md)}
 .kpi.main .kic{background:rgba(255,255,255,.22)}
-.k-caja{--kh:200}.k-gasto{--kh:8}.k-gan{--kh:150}
+.k-caja{--kh:calc(var(--hue) - 30)}.k-gasto{--kh:calc(var(--hue) + 30)}.k-gan{--kh:calc(var(--hue) - 60)}
 [data-theme="dark"] .kpi:not(.main){background:hsl(var(--kh) 28% 18%);color:hsl(var(--kh) 60% 86%)}
-.c-pizza{--ch:12}.c-saltena{--ch:36}.c-refresco{--ch:205}.c-cafe{--ch:28}.c-caja{--ch:265}
-#tabs-producto button{border-color:hsl(var(--ch) 55% 72%);color:hsl(var(--ch) 55% 30%);background:hsl(var(--ch) 80% 95%)}
+.c-pizza{--ch:var(--hue)}.c-saltena{--ch:calc(var(--hue) + 20)}.c-refresco{--ch:calc(var(--hue) - 20)}.c-cafe{--ch:calc(var(--hue) + 40)}.c-caja{--ch:calc(var(--hue) - 40)}.c-otro{--ch:calc(var(--hue) + 60)}
+#tabs-producto{flex-wrap:wrap;gap:6px}
+#tabs-producto button{flex:1 1 auto;border-color:hsl(var(--ch) 55% 72%);color:hsl(var(--ch) 55% 30%);background:hsl(var(--ch) 80% 95%)}
 #tabs-producto button.active{background:hsl(var(--ch) 65% 40%);border-color:hsl(var(--ch) 65% 40%);color:#fff}
 [data-theme="dark"] #tabs-producto button{background:hsl(var(--ch) 26% 16%);color:hsl(var(--ch) 60% 85%);border-color:hsl(var(--ch) 30% 30%)}
 [data-theme="dark"] #tabs-producto button.active{background:hsl(var(--ch) 55% 42%);color:#fff}
@@ -444,6 +445,13 @@ function esqueleto() {
     <div class="sk" style="height:44px;width:65%"></div><div class="sk" style="height:130px"></div>
     <div class="sk" style="height:70px"></div><div class="sk" style="height:48px"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="sk" style="height:116px"></div><div class="sk" style="height:116px"></div></div></div>`;
+}
+let CATALOGO = [];
+try { CATALOGO = JSON.parse(localStorage.getItem('salas_catalogo') || '[]'); } catch (e) { CATALOGO = []; }
+async function cargarCatalogo() {
+  const snap = await conTiempoLimite(db.collection('productos').get(), 8000, 'cargar catálogo');
+  CATALOGO = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  try { localStorage.setItem('salas_catalogo', JSON.stringify(CATALOGO)); } catch (e) {}
 }
 function slug(s) {
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
@@ -733,7 +741,7 @@ async function pantallaPrincipal() {
   const ventasRef = compRef.collection('ventas');
   app.innerHTML = esqueleto();
 
-  // --- Catálogo (solo lo que corresponde a cada compartimento) ---
+  await Promise.race([cargarCatalogo().catch(() => {}), new Promise(r => setTimeout(r, 2500))]);
   const tabsDisponibles = compartimentoActual === 'pizzeria'
     ? [
         { id: 'pizza', lbl: ic('pizza',16)+' Pizza' },
@@ -742,6 +750,12 @@ async function pantallaPrincipal() {
         ...(sucursalActual.tieneCajasPizza ? [{ id: 'caja', lbl: ic('box',16)+' Cajas' }] : [])
       ]
     : [{ id: 'saltena', lbl: ic('empanada',16)+' Salteña' }, { id: 'refresco', lbl: ic('drink',16)+' Refresco' }, { id: 'cafe', lbl: ic('coffee',16)+' Café/Té' }];
+  const extrasArea = CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimentoActual);
+  const tabDe = p => tabsDisponibles.some(t => t.id === p.categoria) ? p.categoria : 'otro';
+  if (extrasArea.some(p => tabDe(p) === 'otro')) tabsDisponibles.push({ id: 'otro', lbl: ic('box',16)+' Otros' });
+  const extrasDeTab = id => extrasArea.filter(p => tabDe(p) === id);
+  const ocultos = new Set(CATALOGO.filter(p => p.base && p.oculto).map(p => p.nombre));
+  const ver = n => !ocultos.has(n);
 
   let tabActiva = tabsDisponibles[0].id;
   let pizzaTamano = null;
@@ -753,11 +767,12 @@ async function pantallaPrincipal() {
         ${tabsDisponibles.map(t => `<button class="c-${t.id} ${t.id===tabActiva?'active':''}" data-tab="${t.id}">${t.lbl}</button>`).join('')}
       </div>
       <div id="opciones-producto" style="margin-top:10px;"></div>
+      <div id="extras-producto"></div>
       <div class="t-secondary" id="producto-elegido-lbl" style="margin-top:8px;"></div>
     `;
   }
 
-  function renderOpciones() {
+  function renderOpcionesBase() {
     const cont = document.getElementById('opciones-producto');
     if (!cont) return;
     if (tabActiva === 'pizza') {
@@ -765,7 +780,7 @@ async function pantallaPrincipal() {
         cont.innerHTML = `
           <div class="t-eyebrow" style="margin-bottom:6px;">Tamaño</div>
           <div class="stat-row" style="flex-wrap:wrap;">
-            ${TAMANOS_PIZZA.map(t => `<button class="btn opt c-${tabActiva}" data-tamano="${t}" style="flex:1 1 45%;">${t}</button>`).join('')}
+            ${TAMANOS_PIZZA.filter(t => SABORES_PIZZA[t].length ? SABORES_PIZZA[t].some(sb => ver('Pizza ' + t + ' ' + sb)) : ver('Pizza ' + t)).map(t => `<button class="btn opt c-${tabActiva}" data-tamano="${t}" style="flex:1 1 45%;">${t}</button>`).join('')}
           </div>
         `;
         cont.querySelectorAll('[data-tamano]').forEach(b => {
@@ -778,7 +793,7 @@ async function pantallaPrincipal() {
         cont.innerHTML = `
           <div class="row"><div class="t-eyebrow">Sabor — ${pizzaTamano}</div><button class="t-secondary" id="btn-cambiar-tamano" style="background:none;border:none;">‹ cambiar tamaño</button></div>
           <div class="stat-row" style="flex-wrap:wrap;margin-top:6px;">
-            ${SABORES_PIZZA[pizzaTamano].map(s => `<button class="btn opt c-${tabActiva}" data-sabor="${s}" style="flex:1 1 45%;">${s}${ph('Pizza '+pizzaTamano+' '+s)}</button>`).join('')}
+            ${SABORES_PIZZA[pizzaTamano].filter(sb => ver('Pizza ' + pizzaTamano + ' ' + sb)).map(s => `<button class="btn opt c-${tabActiva}" data-sabor="${s}" style="flex:1 1 45%;">${s}${ph('Pizza '+pizzaTamano+' '+s)}</button>`).join('')}
           </div>
         `;
         document.getElementById('btn-cambiar-tamano').onclick = () => { pizzaTamano = null; renderOpciones(); };
@@ -788,12 +803,12 @@ async function pantallaPrincipal() {
         });
       }
     } else if (tabActiva === 'saltena') {
-      cont.innerHTML = `<button class="btn opt c-${tabActiva}" id="btn-saltena">Salteña mixta${ph('Salteña mixta')}</button>`;
-      document.getElementById('btn-saltena').onclick = () => seleccionarProducto('Salteña mixta');
+      cont.innerHTML = ver('Salteña mixta') ? `<button class="btn opt c-${tabActiva}" id="btn-saltena">Salteña mixta${ph('Salteña mixta')}</button>` : '';
+      const bsal = document.getElementById('btn-saltena'); if (bsal) bsal.onclick = () => seleccionarProducto('Salteña mixta');
     } else if (tabActiva === 'refresco') {
       cont.innerHTML = `
         <div class="stat-row" style="flex-wrap:wrap;">
-          ${TAMANOS_REFRESCO.map(t => `<button class="btn opt c-${tabActiva}" data-refresco="${t}" style="flex:1 1 30%;">${t}${ph('Refresco '+t)}</button>`).join('')}
+          ${TAMANOS_REFRESCO.filter(t => ver('Refresco ' + t)).map(t => `<button class="btn opt c-${tabActiva}" data-refresco="${t}" style="flex:1 1 30%;">${t}${ph('Refresco '+t)}</button>`).join('')}
         </div>
       `;
       cont.querySelectorAll('[data-refresco]').forEach(b => {
@@ -802,8 +817,8 @@ async function pantallaPrincipal() {
     } else if (tabActiva === 'cafe') {
       cont.innerHTML = `
         <div class="stat-row">
-          <button class="btn opt c-${tabActiva}" data-cafe="Café">Café${ph('Café')}</button>
-          <button class="btn opt c-${tabActiva}" data-cafe="Té">Té${ph('Té')}</button>
+          ${ver('Café') ? `<button class="btn opt c-${tabActiva}" data-cafe="Café">Café${ph('Café')}</button>` : ''}
+          ${ver('Té') ? `<button class="btn opt c-${tabActiva}" data-cafe="Té">Té${ph('Té')}</button>` : ''}
         </div>
       `;
       cont.querySelectorAll('[data-cafe]').forEach(b => {
@@ -812,7 +827,7 @@ async function pantallaPrincipal() {
     } else if (tabActiva === 'caja') {
       cont.innerHTML = `
         <div class="stat-row">
-          ${TAMANOS_CAJA.map(t => `<button class="btn opt c-${tabActiva}" data-caja="${t}">${t}${ph('Caja '+t)}</button>`).join('')}
+          ${TAMANOS_CAJA.filter(t => ver('Caja ' + t)).map(t => `<button class="btn opt c-${tabActiva}" data-caja="${t}">${t}${ph('Caja '+t)}</button>`).join('')}
         </div>
       `;
       cont.querySelectorAll('[data-caja]').forEach(b => {
@@ -934,6 +949,15 @@ async function pantallaPrincipal() {
     await render();
   }
 
+  function renderExtras() {
+    const el = document.getElementById('extras-producto'); if (!el) return;
+    const ex = extrasDeTab(tabActiva);
+    if (!ex.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="t-eyebrow" style="margin:10px 0 6px;">${tabActiva === 'otro' ? 'Productos' : 'Otros productos'}</div><div class="stat-row" style="flex-wrap:wrap;">${ex.map(p => `<button class="btn opt c-${tabActiva}" data-extra="${p.nombre}" style="flex:1 1 45%;">${p.nombre}${ph(p.nombre)}</button>`).join('')}</div>`;
+    el.querySelectorAll('[data-extra]').forEach(b => { b.onclick = () => seleccionarProducto(b.dataset.extra); });
+  }
+  function renderOpciones() { renderOpcionesBase(); renderExtras(); }
+
   async function cargarVentasHoy() {
     const hoy = hoyISO();
     const snap = await conTiempoLimite(ventasRef.where('fecha', '==', hoy).get(), 15000, 'cargar ventas de hoy');
@@ -974,6 +998,7 @@ async function pantallaPrincipal() {
     const iniciales = (comp.empleadoNombre.replace(' (prueba)','').match(/\b\w/g) || ['E']).slice(0,2).join('').toUpperCase();
 
     preciosActuales = snapComp.exists ? (snapComp.data().precios || {}) : {};
+    extrasArea.forEach(p => { if (preciosActuales[p.nombre] == null && p.precio > 0) preciosActuales[p.nombre] = p.precio; });
 
     app.innerHTML = `
       <div class="header-rich">
@@ -1079,6 +1104,14 @@ async function pantallaPrincipal() {
   }
 
   function referenciaStock(producto) {
+    const ex = CATALOGO.find(p => !p.base && p.nombre === producto);
+    if (ex) {
+      return ex.controlaStock ? Object.assign(
+        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(ex.area === 'salteneria' ? 'salteneria' : 'pizzeria')
+          .collection('stock').doc('x-' + slug(producto)),
+        { nombreCorto: producto }
+      ) : null;
+    }
     if (producto.startsWith('Pizza ')) {
       const nombreCorto = producto.replace('Pizza ', '');
       return Object.assign(
@@ -1141,6 +1174,10 @@ function listaItemsStock() {
   TAMANOS_REFRESCO.forEach(t => items.push({
     nombreCorto: t, categoria: 'Refrescos (compartido)',
     ref: db.collection('sucursales').doc(sucursalActual.id).collection('stockRefrescos').doc(slug(t))
+  }));
+  CATALOGO.filter(p => !p.base && p.activo !== false && p.controlaStock && p.area === compartimentoActual).forEach(p => items.push({
+    nombreCorto: p.nombre, categoria: 'Productos agregados',
+    ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual).collection('stock').doc('x-' + slug(p.nombre))
   }));
   return items;
 }

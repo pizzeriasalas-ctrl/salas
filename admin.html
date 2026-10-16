@@ -571,7 +571,7 @@ const TAMANOS_CAJA = ['Grande', 'Mediana'];
 
 function ayerISO() { return sumarDias(hoyISO(), -1); }
 
-function productosDe(compartimento, s) {
+function productosDe(compartimento, s, sinExtras) {
   const lista = [];
   if (compartimento === 'pizzeria') {
     TAMANOS_PIZZA.forEach(t => {
@@ -584,6 +584,7 @@ function productosDe(compartimento, s) {
     lista.push('Salteña mixta', 'Café', 'Té');
   }
   TAMANOS_REFRESCO.forEach(t => lista.push(`Refresco ${t}`));
+  if (!sinExtras) CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimento).forEach(p => lista.push(p.nombre));
   return lista;
 }
 
@@ -615,14 +616,101 @@ Object.assign(ICONOS, {
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   down: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>'
 });
-const TABS = [['reportes', 'chart', 'Reportes'], ['sucursales', 'store', 'Sucursales'], ['accesos', 'key', 'Accesos'], ['datos', 'file', 'Datos']];
+const TABS = [['reportes', 'chart', 'Reportes'], ['sucursales', 'store', 'Sucursales'], ['productos', 'box', 'Productos'], ['accesos', 'key', 'Accesos'], ['datos', 'file', 'Datos']];
 function navInferiorAdmin(activa) {
   return `<div class="bottom-nav">${TABS.map(t => `<button data-nav-admin="${t[0]}" class="${activa === t[0] ? 'active' : ''}"><span class="ic">${ic(t[1], 22)}</span>${t[2]}</button>`).join('')}</div>`;
 }
 function wireNavInferiorAdmin() {
   document.querySelectorAll('[data-nav-admin]').forEach(b => {
-    b.onclick = () => ({ reportes: pantallaReportes, sucursales: pantallaPanel, accesos: pantallaAccesos, datos: pantallaDatos })[b.dataset.navAdmin]();
+    b.onclick = () => ({ reportes: pantallaReportes, sucursales: pantallaPanel, productos: pantallaProductos, accesos: pantallaAccesos, datos: pantallaDatos })[b.dataset.navAdmin]();
   });
+}
+
+// ============================================================
+// PRODUCTOS: agregar, editar y ocultar lo que se vende
+// ============================================================
+let CATALOGO = [];
+async function cargarCatalogo() {
+  const snap = await conTiempoLimite(db.collection('productos').get(), 15000, 'cargar productos');
+  CATALOGO = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+}
+const CATS_PROD = { pizza: 'Pizza', refresco: 'Refresco', saltena: 'Salteña', cafe: 'Café / Té', caja: 'Caja', otro: 'Otro' };
+const AREAS_PROD = { pizzeria: 'Pizzería', salteneria: 'Salteñería' };
+function nombresBase() {
+  const l = [];
+  ['pizzeria', 'salteneria'].forEach(c => productosDe(c, { tieneCajasPizza: true }, true).forEach(n => { if (!l.includes(n)) l.push(n); }));
+  return l;
+}
+function idSeguro(t) { return String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+function guardarProducto(id, datos) {
+  const i = CATALOGO.findIndex(p => p.id === id);
+  if (i >= 0) CATALOGO[i] = Object.assign({}, CATALOGO[i], datos); else CATALOGO.push(Object.assign({ id }, datos));
+  return noEsperar(db.collection('productos').doc(id).set(datos, { merge: true }));
+}
+
+async function pantallaProductos() {
+  app.innerHTML = `<div class="empty-state">Cargando productos…</div>`;
+  try { await cargarCatalogo(); } catch (e) { return mostrarError('cargar los productos', e); }
+  function render() {
+    const nuevos = CATALOGO.filter(p => !p.base);
+    const ocultos = new Set(CATALOGO.filter(p => p.base && p.oculto).map(p => p.nombre));
+    const base = nombresBase();
+    app.innerHTML = `
+      <div class="header"><div><div class="t-title" style="font-size:1.3rem;">Productos</div><div class="t-secondary">Lo que se vende en las apps</div></div><button class="header-btn" id="btn-tema">${ic('palette')}</button></div>
+      <div class="px stack">
+        <button class="btn btn-primary" id="btn-nuevo-prod">+ Agregar producto</button>
+        <div class="t-eyebrow">Productos agregados (${nuevos.length})</div>
+        ${nuevos.length === 0 ? `<div class="card"><div class="t-secondary">Todavía no agregaste productos. Toca "+ Agregar producto".</div></div>` : nuevos.map(p => `
+          <div class="card">
+            <div class="t-subtitle">${esc(p.nombre)}${p.activo === false ? ' <span class="t-secondary">(oculto)</span>' : ''}</div>
+            <div class="t-secondary">${CATS_PROD[p.categoria] || 'Otro'} · ${AREAS_PROD[p.area] || ''} · ${p.precio > 0 ? p.precio + ' Bs' : 'sin precio'} · ${p.controlaStock ? 'con stock' : 'sin stock'}</div>
+            <div class="row" style="gap:8px;margin-top:10px;"><button class="btn btn-secondary" data-editar="${p.id}">Editar</button><button class="btn btn-secondary" data-vis="${p.id}">${p.activo === false ? 'Mostrar' : 'Ocultar'}</button></div>
+          </div>`).join('')}
+        <details class="card"><summary class="t-subtitle">Productos de siempre (${base.length})</summary>
+          <div class="t-secondary" style="margin:6px 0;">Oculta los que no vendes; los puedes volver a mostrar. Sus precios se cambian en cada sucursal.</div>
+          ${base.map(n => `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);"><span class="t-body">${esc(n)}${ocultos.has(n) ? ' <span class="t-secondary">(oculto)</span>' : ''}</span><button class="btn btn-secondary" style="width:auto;padding:8px 14px;" data-base="${esc(n)}">${ocultos.has(n) ? 'Mostrar' : 'Ocultar'}</button></div>`).join('')}
+        </details>
+      </div>
+      ${navInferiorAdmin('productos')}`;
+    document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
+    document.getElementById('btn-nuevo-prod').onclick = () => pantallaFormProducto(null);
+    wireNavInferiorAdmin();
+    document.querySelectorAll('[data-editar]').forEach(b => { b.onclick = () => pantallaFormProducto(CATALOGO.find(p => p.id === b.dataset.editar)); });
+    document.querySelectorAll('[data-vis]').forEach(b => { b.onclick = () => { const p = CATALOGO.find(x => x.id === b.dataset.vis); guardarProducto(p.id, { activo: p.activo === false }); render(); }; });
+    document.querySelectorAll('[data-base]').forEach(b => { b.onclick = () => { const n = b.dataset.base; guardarProducto('base-' + idSeguro(n), { base: true, nombre: n, oculto: !ocultos.has(n) }); render(); }; });
+  }
+  render();
+}
+
+function pantallaFormProducto(p) {
+  const nuevo = !p;
+  p = p || { categoria: 'refresco', area: 'pizzeria', controlaStock: true };
+  app.innerHTML = `
+    <div class="header"><button class="header-btn" id="btn-atras">${ic('back')}</button><div class="t-subtitle">${nuevo ? 'Nuevo producto' : 'Editar producto'}</div><div style="width:38px;"></div></div>
+    <div class="px stack">
+      <div class="field"><label>Nombre (como lo verá el empleado)</label><input type="text" id="in-nom" maxlength="40" value="${esc(p.nombre || '')}" placeholder="Ej: Jugo de naranja"></div>
+      <div class="field"><label>¿Qué es?</label><select id="in-cat">${Object.keys(CATS_PROD).map(k => `<option value="${k}" ${p.categoria === k ? 'selected' : ''}>${CATS_PROD[k]}</option>`).join('')}</select></div>
+      <div class="field"><label>¿En qué área se vende?</label><select id="in-area">${Object.keys(AREAS_PROD).map(k => `<option value="${k}" ${p.area === k ? 'selected' : ''}>${AREAS_PROD[k]}</option>`).join('')}</select></div>
+      <div class="field"><label>Precio en Bs (si lo dejas vacío, el empleado lo escribe)</label><input type="number" id="in-pre" inputmode="decimal" value="${p.precio > 0 ? p.precio : ''}" placeholder="0.00"></div>
+      <div class="row"><span class="t-body">¿Controlar stock?</span><div class="toggle" id="tg-stock" style="width:140px;"><button data-v="si" class="${p.controlaStock ? 'active' : ''}">Sí</button><button data-v="no" class="${!p.controlaStock ? 'active' : ''}">No</button></div></div>
+      <button class="btn btn-primary" id="btn-guardar-prod">Guardar producto</button>
+      <div class="error-text" id="prod-error"></div>
+    </div>`;
+  document.getElementById('btn-atras').onclick = () => pantallaProductos();
+  let stock = !!p.controlaStock;
+  document.querySelectorAll('#tg-stock button').forEach(b => { b.onclick = () => { stock = b.dataset.v === 'si'; document.querySelectorAll('#tg-stock button').forEach(x => x.classList.toggle('active', x === b)); }; });
+  document.getElementById('btn-guardar-prod').onclick = () => {
+    const nombre = document.getElementById('in-nom').value.replace(/["<>]/g, '').trim();
+    const pre = parseFloat(document.getElementById('in-pre').value);
+    const err = document.getElementById('prod-error');
+    if (!nombre) { err.textContent = 'Ponle un nombre al producto.'; return; }
+    const repetido = nombresBase().concat(CATALOGO.filter(x => !x.base && x.id !== p.id).map(x => x.nombre)).some(n => n.toLowerCase() === nombre.toLowerCase());
+    if (repetido) { err.textContent = 'Ya existe un producto con ese nombre.'; return; }
+    const datos = { nombre, categoria: document.getElementById('in-cat').value, area: document.getElementById('in-area').value, precio: pre > 0 ? pre : null, controlaStock: stock, activo: p.activo !== false, base: false, schemaVersion: 1 };
+    const id = nuevo ? 'p-' + idSeguro(nombre) + '-' + Date.now().toString(36) : p.id;
+    guardarProducto(id, datos);
+    pantallaProductos();
+  };
 }
 
 async function pantallaPanel() {
@@ -924,6 +1012,7 @@ async function pantallaEditarPrecios(s, compartimento, volver) {
     return mostrarError('cargar precios', e);
   }
 
+  await cargarCatalogo().catch(() => {});
   const productos = productosDe(compartimento, s);
   const nombreComp = compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería';
 
