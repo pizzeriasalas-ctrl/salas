@@ -1658,7 +1658,7 @@ async function pantallaCaja() {
   const compRef = db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual);
   const gastosRef = compRef.collection('gastos');
 
-  let cajaEfectivo, cajaTotal, gastosHoy, gastosMes;
+  let cajaEfectivo, cajaTotal, gastosHoy, gastosMes, cierresHoy = [];
   try {
     const hoy = hoyISO();
     const snapComp = await conTiempoLimite(compRef.get(), 15000, 'cargar caja');
@@ -1697,6 +1697,10 @@ async function pantallaCaja() {
     ]), 15000, 'cargar gastos');
     gastosHoy = snapG.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     gastosMes = snapGMes.docs.reduce((a, doc) => a + (doc.data().anulado ? 0 : doc.data().monto), 0);
+    try {
+      const snapC = await conTiempoLimite(compRef.collection('cierres').where('fecha', '==', hoy).get(), 8000, 'cargar cierres');
+      cierresHoy = snapC.docs.map(doc => doc.data()).sort((a, b) => (a.creadoEn ? a.creadoEn.toMillis() : 0) - (b.creadoEn ? b.creadoEn.toMillis() : 0));
+    } catch (e) { cierresHoy = []; }
   } catch (e) {
     return mostrarError('cargar caja', e);
   }
@@ -1722,6 +1726,18 @@ async function pantallaCaja() {
           <div class="stat-box"><div class="valor">${cajaQr.toFixed(0)} Bs</div><div class="lbl">${ic('phone',13)} Caja QR</div></div>
         </div>
 
+        <button class="btn btn-secondary" id="btn-mostrar-cierre">Cerrar caja del día</button>
+        ${cierresHoy.length ? (() => { const u = cierresHoy[cierresHoy.length - 1]; const dif = u.diferencia || 0; return `<div class="t-secondary" style="font-size:0.8rem;">Último cierre de hoy: contado ${u.contado.toFixed(2)} Bs · ${Math.abs(dif) < 0.01 ? 'cuadra' : (dif > 0 ? 'sobra ' : 'falta ') + Math.abs(dif).toFixed(2) + ' Bs'}</div>`; })() : ''}
+        <div class="card" id="form-cierre" style="display:none;">
+          <div class="t-secondary">Efectivo esperado (ventas en efectivo menos gastos)</div>
+          <div class="t-price" style="font-size:1.4rem;">${cajaEfectivo.toFixed(2)} Bs</div>
+          <div class="field" style="margin-top:10px;"><label>Efectivo contado en caja (Bs)</label><input type="number" id="in-contado" inputmode="decimal" placeholder="0.00"></div>
+          <div class="t-secondary" id="cierre-dif" style="margin-top:8px;"></div>
+          <div class="field" id="campo-nota-cierre" style="margin-top:10px;display:none;"><label>Motivo de la diferencia (obligatorio)</label><input type="text" id="in-nota-cierre" maxlength="120" placeholder="Ej: faltó sencillo"></div>
+          <button class="btn btn-primary" id="btn-guardar-cierre" style="margin-top:12px;">Guardar cierre</button>
+          <div class="error-text" id="cierre-error"></div>
+          <div class="t-secondary" style="margin-top:6px;font-size:0.72rem;">El cierre solo registra el conteo; la caja no cambia.</div>
+        </div>
         <button class="btn btn-secondary" id="btn-mostrar-gasto">+ Registrar gasto</button>
         <div class="card" id="form-gasto" style="display:none;">
           <div class="field"><label>¿En qué se gastó?</label><input type="text" id="in-motivo" placeholder="Ej: movilidad, insumos"></div>
@@ -1776,6 +1792,40 @@ async function pantallaCaja() {
       const g = gastosHoy.find(x => x.id === b.dataset.anularGasto);
       if (g && await anularMovimiento('gasto', g)) await pantallaCaja();
     }; });
+    const inContado = document.getElementById('in-contado');
+    const difDe = () => { const c = parseFloat(inContado.value); return isNaN(c) ? null : Math.round((c - cajaEfectivo) * 100) / 100; };
+    document.getElementById('btn-mostrar-cierre').onclick = () => {
+      document.getElementById('form-cierre').style.display = 'block';
+      document.getElementById('btn-mostrar-cierre').style.display = 'none';
+      inContado.focus();
+    };
+    inContado.oninput = () => {
+      const dif = difDe(), el = document.getElementById('cierre-dif');
+      if (dif === null) { el.textContent = ''; document.getElementById('campo-nota-cierre').style.display = 'none'; return; }
+      const cuadra = Math.abs(dif) < 0.01;
+      el.innerHTML = cuadra ? '<b style="color:var(--up,green)">La caja cuadra.</b>' : `<b style="color:var(--danger);">${dif > 0 ? 'Sobra' : 'Falta'} ${Math.abs(dif).toFixed(2)} Bs</b>`;
+      document.getElementById('campo-nota-cierre').style.display = cuadra ? 'none' : 'block';
+    };
+    document.getElementById('btn-guardar-cierre').onclick = async () => {
+      const err = document.getElementById('cierre-error');
+      const contado = parseFloat(inContado.value);
+      if (isNaN(contado) || contado < 0) { err.textContent = 'Escribe el efectivo que contaste.'; return; }
+      const nota = document.getElementById('in-nota-cierre').value.trim();
+      try {
+        const snap = await conTiempoLimite(compRef.get(), 8000, 'leer caja');
+        const esperado = Math.round(((snap.exists ? snap.data().cajaEfectivo : 0) || 0) * 100) / 100;
+        const diferencia = Math.round((contado - esperado) * 100) / 100;
+        if (Math.abs(diferencia) >= 0.01 && nota.length < 3) { err.textContent = 'Hay diferencia: escribe el motivo.'; return; }
+        err.textContent = '';
+        await guardarSinBloquear(compRef.collection('cierres').doc().set({
+          fecha: hoyISO(), esperado, contado: Math.round(contado * 100) / 100, diferencia, nota: Math.abs(diferencia) >= 0.01 ? nota : '',
+          creadoEn: firebase.firestore.Timestamp.now(), schemaVersion: 1
+        }));
+        await pantallaCaja();
+      } catch (e) {
+        err.textContent = 'No se pudo guardar el cierre. Intenta de nuevo.';
+      }
+    };
     document.getElementById('btn-mostrar-gasto').onclick = () => {
       document.getElementById('form-gasto').style.display = 'block';
       document.getElementById('btn-mostrar-gasto').style.display = 'none';
