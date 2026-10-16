@@ -1570,12 +1570,19 @@ async function pantallaDatos() {
           <div class="error-text" id="datos-msg"></div>
         </div>
         <div class="t-secondary" style="text-align:center;">Excel con hoja Resumen (por área y total), Ventas, Gastos, Bajas y Retiros.</div>
+        <button class="btn btn-secondary" id="btn-cerrar-sesion">Cerrar sesión del panel</button>
       </div>
       ${navInferiorAdmin('datos')}`;
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
     document.querySelectorAll('#seg-r button').forEach(b => { b.onclick = () => { rangoDatos = b.dataset.r; render(); }; });
     document.getElementById('sel-suc').onchange = e => { sucDatos = e.target.value; };
     document.getElementById('btn-excel').onclick = exportar;
+    document.getElementById('btn-cerrar-sesion').onclick = async () => {
+      if (!navigator.onLine) { alert('Conéctate a internet para cerrar sesión (así no se pierde ningún cambio pendiente).'); return; }
+      if (!confirm('¿Cerrar sesión? Para volver a entrar necesitarás tu correo y tu contraseña.')) return;
+      try { await auth.signOut(); } catch (e) {}
+      iniciar();
+    };
     wireNavInferiorAdmin();
   }
   async function exportar() {
@@ -1618,10 +1625,8 @@ async function iniciar() {
     app.innerHTML = `<div class="empty-state">Abriendo…</div>`;
     let usuario = null;
     try { usuario = await conTiempoLimite(usuarioGuardado(), 6000, 'comprobar sesión guardada'); } catch (e) {}
-    if (!usuario && navigator.onLine) {
-      try { await conTiempoLimite(auth.signInAnonymously(), 15000, 'iniciar sesión'); }
-      catch (e) { if (navigator.onLine) throw e; }
-    }
+    // Solo entra quien inició sesión con correo y contraseña (la sesión anónima de los empleados no sirve aquí)
+    if (!usuario || usuario.isAnonymous) return pantallaLogin();
     await pantallaReportes();
   } catch (e) {
     const paso = (e && e.message && e.message.startsWith('TIMEOUT:'))
@@ -1629,6 +1634,50 @@ async function iniciar() {
       : 'error inesperado';
     mostrarError(paso, e);
   }
+}
+
+function pantallaLogin(aviso) {
+  app.innerHTML = `
+    <div class="px stack" style="padding-top:56px;max-width:420px;margin:0 auto;">
+      <div class="t-title">Panel de la dueña</div>
+      <div class="t-secondary">Entra con tu correo y tu contraseña.</div>
+      <div class="field"><label>Correo</label><input type="email" id="lg-correo" autocomplete="username" inputmode="email" autocapitalize="off" placeholder="tucorreo@gmail.com"></div>
+      <div class="field"><label>Contraseña</label><input type="password" id="lg-clave" autocomplete="current-password"></div>
+      <div class="error-text" id="lg-msg">${aviso || ''}</div>
+      <button class="btn btn-primary" id="lg-entrar">Entrar</button>
+      <button class="link" id="lg-olvide" style="align-self:center;">¿Olvidaste tu contraseña?</button>
+    </div>`;
+  const msg = document.getElementById('lg-msg'), btn = document.getElementById('lg-entrar');
+  const dar = (txt, ok) => { msg.style.color = ok ? 'var(--text-secondary)' : ''; msg.textContent = txt; };
+  const correo = () => document.getElementById('lg-correo').value.trim().toLowerCase();
+  async function entrar() {
+    const c = correo(), k = document.getElementById('lg-clave').value;
+    if (!c || !k) return dar('Escribe tu correo y tu contraseña.');
+    if (!navigator.onLine) return dar('Necesitas internet para entrar. Después podrás abrir el panel sin internet.');
+    btn.disabled = true; dar('Entrando…', true);
+    try {
+      await conTiempoLimite(auth.signInWithEmailAndPassword(c, k), 15000, 'iniciar sesión');
+      return iniciar();
+    } catch (e) {
+      const m = {
+        'auth/invalid-credential': 'Correo o contraseña incorrectos.', 'auth/wrong-password': 'Correo o contraseña incorrectos.',
+        'auth/user-not-found': 'Correo o contraseña incorrectos.', 'auth/invalid-email': 'Ese correo no es válido.',
+        'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos e intenta de nuevo.',
+        'auth/network-request-failed': 'No hay internet. Revisa tu conexión.',
+        'auth/operation-not-allowed': 'Falta activar "Correo y contraseña" en Firebase (Authentication → Método de acceso).'
+      }[e && e.code] || (e && e.message && e.message.startsWith('TIMEOUT:') ? 'Tardó demasiado. Revisa tu conexión.' : 'No se pudo entrar. ' + ((e && e.code) || ''));
+      dar(m); btn.disabled = false;
+    }
+  }
+  btn.onclick = entrar;
+  document.getElementById('lg-clave').onkeydown = ev => { if (ev.key === 'Enter') entrar(); };
+  document.getElementById('lg-olvide').onclick = async () => {
+    const c = correo();
+    if (!c) return dar('Escribe tu correo arriba y vuelve a tocar "¿Olvidaste tu contraseña?".');
+    if (!navigator.onLine) return dar('Necesitas internet para recuperar la contraseña.');
+    try { await auth.sendPasswordResetEmail(c); dar('Listo. Te enviamos un correo para crear una contraseña nueva (revisa también Spam).', true); }
+    catch (e) { dar(e && e.code === 'auth/invalid-email' ? 'Ese correo no es válido.' : 'No se pudo enviar el correo. Intenta de nuevo.'); }
+  };
 }
 
 function usuarioGuardado() {
