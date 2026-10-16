@@ -688,19 +688,22 @@ function pantallaFormProducto(p) {
   app.innerHTML = `
     <div class="header"><button class="header-btn" id="btn-atras">${ic('back')}</button><div class="t-subtitle">${nuevo ? 'Nuevo producto' : 'Editar producto'}</div><div style="width:38px;"></div></div>
     <div class="px stack">
-      <div class="field"><label>Nombre (como lo verá el empleado)</label><input type="text" id="in-nom" maxlength="40" value="${esc(p.nombre || '')}" placeholder="Ej: Jugo de naranja"></div>
+      <div class="field"><label>Nombre (como lo verá el empleado)</label><input type="text" id="in-nom" maxlength="40" value="${esc(p.nombre || '')}" placeholder="Ej: Jugo de naranja" ${nuevo ? '' : 'readonly style="opacity:.7;"'}>${nuevo ? '' : '<div class="t-secondary" style="margin-top:4px;">El nombre no se puede cambiar (así no se pierde su stock ni su historial). Si necesitas otro nombre, oculta este producto y crea uno nuevo.</div>'}</div>
       <div class="field"><label>¿Qué es?</label><select id="in-cat">${Object.keys(CATS_PROD).map(k => `<option value="${k}" ${p.categoria === k ? 'selected' : ''}>${CATS_PROD[k]}</option>`).join('')}</select></div>
       <div class="field"><label>¿En qué área se vende?</label><select id="in-area">${Object.keys(AREAS_PROD).map(k => `<option value="${k}" ${p.area === k ? 'selected' : ''}>${AREAS_PROD[k]}</option>`).join('')}</select></div>
       <div class="field"><label>Precio en Bs (si lo dejas vacío, el empleado lo escribe)</label><input type="number" id="in-pre" inputmode="decimal" value="${p.precio > 0 ? p.precio : ''}" placeholder="0.00"></div>
       <div class="row"><span class="t-body">¿Controlar stock?</span><div class="toggle" id="tg-stock" style="width:140px;"><button data-v="si" class="${p.controlaStock ? 'active' : ''}">Sí</button><button data-v="no" class="${!p.controlaStock ? 'active' : ''}">No</button></div></div>
+      <div class="t-secondary" id="aviso-stock" style="display:none;background:var(--surface-2,rgba(255,170,0,.14));border-radius:10px;padding:10px 12px;">⚠ Este producto empieza con <b>0 unidades</b>. Antes de venderlo, el empleado debe cargar su stock en la pestaña Stock de cada sucursal.</div>
       <button class="btn btn-primary" id="btn-guardar-prod">Guardar producto</button>
       <div class="error-text" id="prod-error"></div>
     </div>`;
   document.getElementById('btn-atras').onclick = () => pantallaProductos();
   let stock = !!p.controlaStock;
-  document.querySelectorAll('#tg-stock button').forEach(b => { b.onclick = () => { stock = b.dataset.v === 'si'; document.querySelectorAll('#tg-stock button').forEach(x => x.classList.toggle('active', x === b)); }; });
+  const avisoStock = () => { document.getElementById('aviso-stock').style.display = (stock && (nuevo || !p.controlaStock)) ? 'block' : 'none'; };
+  avisoStock();
+  document.querySelectorAll('#tg-stock button').forEach(b => { b.onclick = () => { stock = b.dataset.v === 'si'; document.querySelectorAll('#tg-stock button').forEach(x => x.classList.toggle('active', x === b)); avisoStock(); }; });
   document.getElementById('btn-guardar-prod').onclick = () => {
-    const nombre = document.getElementById('in-nom').value.replace(/["<>]/g, '').trim();
+    const nombre = nuevo ? document.getElementById('in-nom').value.replace(/["<>]/g, '').trim() : p.nombre;
     const pre = parseFloat(document.getElementById('in-pre').value);
     const err = document.getElementById('prod-error');
     if (!nombre) { err.textContent = 'Ponle un nombre al producto.'; return; }
@@ -1023,12 +1026,12 @@ async function pantallaEditarPrecios(s, compartimento, volver) {
       <div style="width:38px;"></div>
     </div>
     <div class="px stack">
-      <div class="t-secondary">${s.nombre} — deja en blanco lo que aún no quieras fijar.</div>
+      <div class="t-secondary">${s.nombre} — deja en blanco lo que aún no quieras fijar. En los productos agregados, si lo dejas en blanco se usa el precio que les pusiste en Productos (se ve en gris).</div>
       <div class="card-flat">
         ${productos.map(p => `
           <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);">
             <span class="t-body">${p}</span>
-            <input type="number" inputmode="decimal" data-precio="${p}" value="${precios[p] != null ? precios[p] : ''}"
+            <input type="number" inputmode="decimal" data-precio="${esc(p)}" value="${precios[p] != null ? precios[p] : ''}" placeholder="${(() => { const x = CATALOGO.find(c => !c.base && c.nombre === p); return x && x.precio > 0 ? x.precio : ''; })()}"
               style="width:84px;text-align:right;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);">
           </div>
         `).join('')}

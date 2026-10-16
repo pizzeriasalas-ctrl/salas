@@ -1,5 +1,5 @@
 // Service worker compartido: deja index.html y admin.html abrir sin internet.
-const V = 'salas-v7';
+const V = 'salas-v8';
 const LOCAL = ['./', 'index.html', 'admin.html', 'manifest.webmanifest', 'manifest-admin.webmanifest',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'icon-admin-192.png', 'icon-admin-512.png', 'icon-admin-maskable-512.png'];
 const CDN = ['https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js',

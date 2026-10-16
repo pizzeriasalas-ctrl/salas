@@ -453,6 +453,18 @@ async function cargarCatalogo() {
   CATALOGO = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
   try { localStorage.setItem('salas_catalogo', JSON.stringify(CATALOGO)); } catch (e) {}
 }
+// Escucha el catálogo en vivo: los productos nuevos aparecen solos (y sin internet usa la copia guardada)
+let catalogoAlCambiar = null, catalogoEscuchando = false;
+function escucharCatalogo(alCambiar) {
+  catalogoAlCambiar = alCambiar;
+  if (catalogoEscuchando) return;
+  catalogoEscuchando = true;
+  db.collection('productos').onSnapshot(snap => {
+    CATALOGO = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    try { localStorage.setItem('salas_catalogo', JSON.stringify(CATALOGO)); } catch (e) {}
+    try { if (catalogoAlCambiar) catalogoAlCambiar(); } catch (e) {}
+  }, () => {});
+}
 function slug(s) {
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
 }
@@ -750,12 +762,18 @@ async function pantallaPrincipal() {
         ...(sucursalActual.tieneCajasPizza ? [{ id: 'caja', lbl: ic('box',16)+' Cajas' }] : [])
       ]
     : [{ id: 'saltena', lbl: ic('empanada',16)+' Salteña' }, { id: 'refresco', lbl: ic('drink',16)+' Refresco' }, { id: 'cafe', lbl: ic('coffee',16)+' Café/Té' }];
-  const extrasArea = CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimentoActual);
-  const tabDe = p => tabsDisponibles.some(t => t.id === p.categoria) ? p.categoria : 'otro';
-  if (extrasArea.some(p => tabDe(p) === 'otro')) tabsDisponibles.push({ id: 'otro', lbl: ic('box',16)+' Otros' });
+  const tabsBase = tabsDisponibles.slice();
+  let extrasArea = [], ocultos = new Set();
+  const tabDe = p => tabsBase.some(t => t.id === p.categoria) ? p.categoria : 'otro';
+  function recalcularCatalogo() {
+    extrasArea = CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimentoActual);
+    ocultos = new Set(CATALOGO.filter(p => p.base && p.oculto).map(p => p.nombre));
+    tabsDisponibles.length = 0; tabsBase.forEach(t => tabsDisponibles.push(t));
+    if (extrasArea.some(p => tabDe(p) === 'otro')) tabsDisponibles.push({ id: 'otro', lbl: ic('box',16)+' Otros' });
+  }
   const extrasDeTab = id => extrasArea.filter(p => tabDe(p) === id);
-  const ocultos = new Set(CATALOGO.filter(p => p.base && p.oculto).map(p => p.nombre));
   const ver = n => !ocultos.has(n);
+  recalcularCatalogo();
 
   let tabActiva = tabsDisponibles[0].id;
   let pizzaTamano = null;
@@ -836,7 +854,12 @@ async function pantallaPrincipal() {
     }
   }
 
-  let preciosActuales = {};
+  let preciosActuales = {}, preciosSucursal = {};
+  // Precio de la sucursal manda; si no tiene, se usa el del producto en el catálogo
+  function armarPrecios() {
+    preciosActuales = Object.assign({}, preciosSucursal);
+    extrasArea.forEach(p => { if (preciosActuales[p.nombre] == null && p.precio > 0) preciosActuales[p.nombre] = p.precio; });
+  }
   let cantidadVenta = 1;
   function actualizarTotalVenta() {
     const campo = document.getElementById('in-monto');
@@ -997,8 +1020,8 @@ async function pantallaPrincipal() {
     const horasAMostrar = [8,10,12,14,16,18,20];
     const iniciales = (comp.empleadoNombre.replace(' (prueba)','').match(/\b\w/g) || ['E']).slice(0,2).join('').toUpperCase();
 
-    preciosActuales = snapComp.exists ? (snapComp.data().precios || {}) : {};
-    extrasArea.forEach(p => { if (preciosActuales[p.nombre] == null && p.precio > 0) preciosActuales[p.nombre] = p.precio; });
+    preciosSucursal = snapComp.exists ? (snapComp.data().precios || {}) : {};
+    armarPrecios();
 
     app.innerHTML = `
       <div class="header-rich">
@@ -1145,6 +1168,15 @@ async function pantallaPrincipal() {
     return null; // café/té no llevan stock
   }
 
+  // Si la dueña cambia el catálogo mientras la app está abierta, se actualiza sola (sin perder el pedido en curso)
+  escucharCatalogo(() => {
+    recalcularCatalogo(); armarPrecios();
+    const tabs = document.getElementById('tabs-producto');
+    if (!tabs) return;
+    if (!tabsDisponibles.some(x => x.id === tabActiva)) { tabActiva = tabsDisponibles[0].id; pizzaTamano = null; productoElegido = null; }
+    tabs.innerHTML = tabsDisponibles.map(x => `<button class="c-${x.id} ${x.id===tabActiva?'active':''}" data-tab="${x.id}">${x.lbl}</button>`).join('');
+    wireSelectorProducto();
+  });
   await render();
 }
 
