@@ -1378,11 +1378,15 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
     comps.forEach(c => [['ventas', 'V'], ['gastos', 'G']].forEach(([col, k]) => {
       T.push(base(c).collection(col).where('fecha', '>=', desde).where('fecha', '<=', hasta).get().then(snap => snap.docs.forEach(d => {
         const o = { ...d.data(), comp: c };
-        (cache[o.fecha] = cache[o.fecha] || { V: [], G: [] })[k].push(o);
+        (cache[o.fecha] = cache[o.fecha] || { V: [], G: [], C: [] })[k].push(o);
       })));
     }));
+    comps.forEach(c => T.push(base(c).collection('cierres').where('fecha', '>=', desde).where('fecha', '<=', hasta).get().then(snap => snap.docs.forEach(d => {
+      const o = { ...d.data(), comp: c };
+      (cache[o.fecha] = cache[o.fecha] || { V: [], G: [], C: [] }).C.push(o);
+    })).catch(() => {})));
     await conTiempoLimite(Promise.all(T), 20000, 'cargar ventas y gastos');
-    for (let f = desde; f <= hasta; f = sumarDias(f, 1)) { cargado[f] = true; cache[f] = cache[f] || { V: [], G: [] }; }
+    for (let f = desde; f <= hasta; f = sumarDias(f, 1)) { cargado[f] = true; cache[f] = cache[f] || { V: [], G: [], C: [] }; }
   }
   let stock = [];
   async function traerStock() {
@@ -1421,7 +1425,7 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
 
   function render() {
     const filtra = x => area === 'todo' || x.comp === area;
-    const dia = cache[fecha] || { V: [], G: [] };
+    const dia = cache[fecha] || { V: [], G: [], C: [] };
     const V = dia.V.filter(filtra).sort((a, b) => tiempo(b) - tiempo(a));
     const G = dia.G.filter(filtra).sort((a, b) => tiempo(b) - tiempo(a));
     const tV = V.reduce((a, x) => a + (x.monto || 0), 0), tG = G.reduce((a, x) => a + (x.monto || 0), 0);
@@ -1462,6 +1466,14 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
 
         <div class="ttl">Stock: lo que queda ahora</div>
         <div class="card">${stockHtml()}</div>
+
+        ${(dia.C || []).length ? `<div class="ttl">Cierres de caja</div>
+        <div class="card">${[...dia.C].sort((x, y) => tiempo(x) - tiempo(y)).map((x, i) => { const dif = x.diferencia || 0, ok = Math.abs(dif) < 0.01;
+          return `<div class="mov" ${i === 0 ? 'style="border-top:none"' : ''}>
+            <div class="mh">${hhmm(hora(x))}</div>
+            <div><div class="mt">${comps.length > 1 ? NOMBRE_AREA[x.comp] + ' · ' : ''}Contado ${(x.contado || 0).toFixed(2)} Bs</div><div class="t-secondary">Esperado ${(x.esperado || 0).toFixed(2)} Bs${x.nota ? ' · ' + esc(x.nota) : ''}</div></div>
+            <div class="mm" style="color:${ok ? 'var(--up)' : 'var(--down)'}">${ok ? 'Cuadra' : (dif > 0 ? '+' : '−') + Math.abs(dif).toFixed(2)}</div>
+          </div>`; }).join('')}</div>` : ''}
 
         <div class="ttl">Ventas</div>
         <div class="card">${V.length === 0 ? `<div class="empty-state" style="padding:14px 0;">No hubo ventas este día.</div>` : V.map((x, i) => `
