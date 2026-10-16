@@ -98,6 +98,10 @@ body{
 .btn-secondary{background:var(--accent-light);color:var(--accent);}
 .btn-tertiary{background:transparent;color:var(--text-secondary);}
 .btn-danger{background:#fde8e5;color:var(--danger);}
+.mo-ov{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,10,15,.55);animation:fade .15s}
+.mo-c{width:100%;max-width:480px;background:var(--surface);border-radius:20px 20px 0 0;padding:20px;}
+.link-anular{background:none;border:0;color:var(--danger);font-weight:600;font-size:.8rem;padding:6px 0 6px 12px;cursor:pointer}
+.anulada{opacity:.55}.anulada .t-body,.anulada strong{text-decoration:line-through}.anulada .badge,.anulada .t-secondary{text-decoration:none;display:inline-block}
 
 .field{width:100%;}
 .field label{display:block;font-size:0.82rem;color:var(--text-secondary);margin-bottom:6px;font-weight:600;}
@@ -496,6 +500,103 @@ function guardarSinBloquear(promesa) {
   // interfaz se quedaría pegada en "Guardando…" para siempre.
   Promise.resolve(promesa).catch(() => {});
   return Promise.resolve();
+}
+
+function escHtml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function referenciaStock(producto) {
+  const ex = CATALOGO.find(p => !p.base && p.nombre === producto);
+  if (ex) {
+    return ex.controlaStock ? Object.assign(
+      db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(ex.area === 'salteneria' ? 'salteneria' : 'pizzeria')
+        .collection('stock').doc('x-' + slug(producto)),
+      { nombreCorto: producto }
+    ) : null;
+  }
+  if (producto.startsWith('Pizza ')) {
+    const nombreCorto = producto.replace('Pizza ', '');
+    return Object.assign(
+      db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria')
+        .collection('stock').doc(slug(nombreCorto)),
+      { nombreCorto }
+    );
+  }
+  if (producto === 'Salteña mixta') {
+    return Object.assign(
+      db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('salteneria')
+        .collection('stock').doc('saltena-mixta'),
+      { nombreCorto: 'Salteña mixta' }
+    );
+  }
+  if (producto.startsWith('Refresco ')) {
+    const nombreCorto = producto.replace('Refresco ', '');
+    return Object.assign(
+      db.collection('sucursales').doc(sucursalActual.id).collection('stockRefrescos').doc(slug(nombreCorto)),
+      { nombreCorto }
+    );
+  }
+  if (producto.startsWith('Caja ')) {
+    const nombreCorto = producto; // 'Caja Grande' / 'Caja Mediana'
+    return Object.assign(
+      db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria')
+        .collection('stock').doc(slug(nombreCorto)),
+      { nombreCorto }
+    );
+  }
+  return null; // café/té no llevan stock
+}
+
+function pedirMotivoAnulacion(titulo, detalle) {
+  return new Promise(res => {
+    const d = document.createElement('div'); d.className = 'mo-ov';
+    d.innerHTML = `<div class="mo-c"><div class="t-subtitle">${escHtml(titulo)}</div><div class="t-secondary" style="margin:4px 0 12px;">${escHtml(detalle)}</div>
+      <div class="field"><label>Motivo (obligatorio)</label><input type="text" id="mo-in" maxlength="120" placeholder="Ej: error de cobro"></div>
+      <div class="error-text" id="mo-err"></div>
+      <div class="stack" style="margin-top:12px;"><button class="btn btn-danger" id="mo-ok">Anular</button><button class="btn btn-secondary" id="mo-no">Cancelar</button></div></div>`;
+    document.body.appendChild(d);
+    const cerrar = v => { d.remove(); res(v); };
+    d.querySelector('#mo-no').onclick = () => cerrar(null);
+    d.querySelector('#mo-ok').onclick = () => {
+      const m = d.querySelector('#mo-in').value.trim();
+      if (m.length < 3) { d.querySelector('#mo-err').textContent = 'Escribe el motivo (mínimo 3 letras).'; return; }
+      cerrar(m);
+    };
+  });
+}
+
+// Anula una venta o un gasto: no se borra, queda marcado con su motivo, y se revierte caja (y stock en ventas).
+async function anularMovimiento(tipo, m) {
+  const esVenta = tipo === 'venta';
+  const detalle = esVenta ? `${m.cantidad > 1 ? m.cantidad + 'x ' : ''}${m.producto} · ${m.monto.toFixed(2)} Bs` : `${m.motivo} · ${m.monto.toFixed(2)} Bs`;
+  const motivo = await pedirMotivoAnulacion(esVenta ? 'Anular venta' : 'Anular gasto', detalle);
+  if (!motivo) return false;
+  const compRef = db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual);
+  const docRef = compRef.collection(esVenta ? 'ventas' : 'gastos').doc(m.id);
+  const inc = n => firebase.firestore.FieldValue.increment(n);
+  try {
+    const [sd, sc] = await conTiempoLimite(Promise.all([docRef.get(), compRef.get()]), 10000, 'anular');
+    if (!sd.exists) throw new Error('NO_EXISTE');
+    if (sd.data().anulado) throw new Error('YA_ANULADO');
+    const c = sc.exists ? sc.data() : {};
+    const esEf = m.formaPago === 'efectivo';
+    if (esVenta && ((c.cajaTotal || 0) + 0.01 < m.monto || (esEf && (c.cajaEfectivo || 0) + 0.01 < m.monto))) throw new Error('CAJA_RETIRADA');
+    await guardarSinBloquear(docRef.update({ anulado: true, anuladoMotivo: motivo, anuladoEn: firebase.firestore.Timestamp.now() }));
+    if (esVenta) {
+      const r = referenciaStock(m.producto);
+      if (r) await guardarSinBloquear(r.set({ producto: r.nombreCorto, cantidad: inc(m.cantidad) }, { merge: true }));
+      await guardarSinBloquear(compRef.set({ cajaEfectivo: inc(esEf ? -m.monto : 0), cajaTotal: inc(-m.monto) }, { merge: true }));
+    } else {
+      await guardarSinBloquear(compRef.set({ cajaEfectivo: inc(m.monto), cajaTotal: inc(m.monto) }, { merge: true }));
+    }
+    m.anulado = true; m.anuladoMotivo = motivo;
+    return true;
+  } catch (e) {
+    const k = (e && e.message) || '';
+    alert(k === 'CAJA_RETIRADA' ? 'No se puede anular: la caja ya no tiene ese dinero (puede que ya se haya retirado). Avisa a la dueña.'
+      : k === 'YA_ANULADO' ? 'Este movimiento ya estaba anulado.'
+      : 'No se pudo anular. Intenta de nuevo.');
+    return false;
+  }
 }
 
 function mostrarError(paso, e) {
@@ -984,7 +1085,7 @@ async function pantallaPrincipal() {
   async function cargarVentasHoy() {
     const hoy = hoyISO();
     const snap = await conTiempoLimite(ventasRef.where('fecha', '==', hoy).get(), 15000, 'cargar ventas de hoy');
-    const lista = snap.docs.map(d => d.data());
+    const lista = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     lista.sort((a, b) => {
       const ta = a.creadoEn && a.creadoEn.toMillis ? a.creadoEn.toMillis() : 0;
       const tb = b.creadoEn && b.creadoEn.toMillis ? b.creadoEn.toMillis() : 0;
@@ -994,11 +1095,12 @@ async function pantallaPrincipal() {
   }
 
   async function render() {
-    const [ventas, snapComp, snapGastosHoy] = await Promise.all([
+    const [ventasTodas, snapComp, snapGastosHoy] = await Promise.all([
       cargarVentasHoy(), compRef.get(),
       compRef.collection('gastos').where('fecha', '==', hoyISO()).get().catch(() => ({ docs: [] }))
     ]);
-    const gastosHoyTotal = snapGastosHoy.docs.reduce((a, d) => a + (d.data().monto || 0), 0);
+    const ventas = ventasTodas.filter(v => !v.anulado);
+    const gastosHoyTotal = snapGastosHoy.docs.filter(d => !d.data().anulado).reduce((a, d) => a + (d.data().monto || 0), 0);
     const totalEfectivo = ventas.filter(v => v.formaPago === 'efectivo').reduce((a, v) => a + v.monto, 0);
     const totalQr = ventas.filter(v => v.formaPago === 'qr').reduce((a, v) => a + v.monto, 0);
     const totalHoy = totalEfectivo + totalQr;
@@ -1064,10 +1166,10 @@ async function pantallaPrincipal() {
 
         <div class="t-eyebrow" style="margin-top:var(--space-2);">Ventas de hoy (${ventas.length})</div>
         <div class="card-flat">
-          ${ventas.length === 0 ? `<div class="t-secondary">Aún no hay ventas registradas hoy.</div>` : ventas.map(v => `
-            <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
-              <span class="t-body">${v.cantidad > 1 ? v.cantidad + 'x ' : ''}${v.producto} <span class="t-secondary">${v.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span></span>
-              <strong>${v.monto.toFixed(2)} Bs</strong>
+          ${ventasTodas.length === 0 ? `<div class="t-secondary">Aún no hay ventas registradas hoy.</div>` : ventasTodas.map(v => `
+            <div class="row ${v.anulado ? 'anulada' : ''}" style="padding:6px 0;border-bottom:1px solid var(--border);">
+              <span class="t-body">${v.cantidad > 1 ? v.cantidad + 'x ' : ''}${v.producto} <span class="t-secondary">${v.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span>${v.anulado ? ` <span class="badge badge-danger">Anulada</span> <span class="t-secondary">${escHtml(v.anuladoMotivo || '')}</span>` : ''}</span>
+              <span style="display:flex;align-items:center;"><strong>${v.monto.toFixed(2)} Bs</strong>${v.anulado ? '' : `<button class="link-anular" data-anular-venta="${v.id}">Anular</button>`}</span>
             </div>
           `).join('')}
         </div>
@@ -1101,6 +1203,10 @@ async function pantallaPrincipal() {
     if (carrito.size) abrirForm();
     const bd = document.getElementById('btn-deshacer');
     if (bd) bd.onclick = () => deshacer().catch(e => mostrarError('deshacer venta', e));
+    document.querySelectorAll('[data-anular-venta]').forEach(b => { b.onclick = async () => {
+      const v = ventasTodas.find(x => x.id === b.dataset.anularVenta);
+      if (v && await anularMovimiento('venta', v)) { ultimaVenta = null; await render(); }
+    }; });
 
     document.getElementById('btn-mas-cant').onclick = () => { cantidadVenta++; actualizarTotalVenta(); };
     document.getElementById('btn-menos-cant').onclick = () => { if (cantidadVenta > 1) cantidadVenta--; actualizarTotalVenta(); };
@@ -1126,47 +1232,6 @@ async function pantallaPrincipal() {
     };
   }
 
-  function referenciaStock(producto) {
-    const ex = CATALOGO.find(p => !p.base && p.nombre === producto);
-    if (ex) {
-      return ex.controlaStock ? Object.assign(
-        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(ex.area === 'salteneria' ? 'salteneria' : 'pizzeria')
-          .collection('stock').doc('x-' + slug(producto)),
-        { nombreCorto: producto }
-      ) : null;
-    }
-    if (producto.startsWith('Pizza ')) {
-      const nombreCorto = producto.replace('Pizza ', '');
-      return Object.assign(
-        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria')
-          .collection('stock').doc(slug(nombreCorto)),
-        { nombreCorto }
-      );
-    }
-    if (producto === 'Salteña mixta') {
-      return Object.assign(
-        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('salteneria')
-          .collection('stock').doc('saltena-mixta'),
-        { nombreCorto: 'Salteña mixta' }
-      );
-    }
-    if (producto.startsWith('Refresco ')) {
-      const nombreCorto = producto.replace('Refresco ', '');
-      return Object.assign(
-        db.collection('sucursales').doc(sucursalActual.id).collection('stockRefrescos').doc(slug(nombreCorto)),
-        { nombreCorto }
-      );
-    }
-    if (producto.startsWith('Caja ')) {
-      const nombreCorto = producto; // 'Caja Grande' / 'Caja Mediana'
-      return Object.assign(
-        db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria')
-          .collection('stock').doc(slug(nombreCorto)),
-        { nombreCorto }
-      );
-    }
-    return null; // café/té no llevan stock
-  }
 
   // Si la dueña cambia el catálogo mientras la app está abierta, se actualiza sola (sin perder el pedido en curso)
   escucharCatalogo(() => {
@@ -1453,8 +1518,8 @@ async function pantallaHistorial() {
       retirosRef.where('fecha', '>=', desde).orderBy('fecha', 'desc').limit(100).get(),
       mermasCompartidasRef.where('fecha', '>=', desde).orderBy('fecha', 'desc').limit(300).get()
     ]), 15000, 'cargar historial');
-    const ventas = snapV.docs.map(d => ({ tipo: 'venta', ...d.data() }));
-    const gastos = snapG.docs.map(d => ({ tipo: 'gasto', ...d.data() }));
+    const ventas = snapV.docs.map(d => ({ tipo: 'venta', ...d.data(), id: d.id }));
+    const gastos = snapG.docs.map(d => ({ tipo: 'gasto', ...d.data(), id: d.id }));
     const mermas = snapM.docs.map(d => ({ tipo: 'merma', ...d.data() }));
     const retiros = snapR.docs.map(d => ({ tipo: 'retiro', ...d.data() }));
     const mermasCompartidas = snapMC.docs.map(d => ({ tipo: 'merma', compartida: true, ...d.data() }));
@@ -1476,6 +1541,7 @@ async function pantallaHistorial() {
   const dias = Object.keys(porDia).sort((a, b) => b.localeCompare(a));
   let diaAbierto = dias[0] || null;
   let filtro = 'todos'; // todos | ventas | gastos | bajas
+  const puedeAnular = m => !m.anulado && m.fecha === hoyISO();
 
   function render() {
     const tipoPorFiltro = { ventas: 'venta', gastos: 'gasto', bajas: 'merma', retiros: 'retiro' };
@@ -1502,8 +1568,8 @@ async function pantallaHistorial() {
           if (filtro === 'bajas') itemsDia = itemsDia.filter(m => m.tipo === 'merma');
           if (filtro === 'retiros') itemsDia = itemsDia.filter(m => m.tipo === 'retiro');
           if (itemsDia.length === 0) return '';
-          const totalVentas = itemsDia.filter(m => m.tipo === 'venta').reduce((a, m) => a + m.monto, 0);
-          const totalGastos = itemsDia.filter(m => m.tipo === 'gasto').reduce((a, m) => a + m.monto, 0);
+          const totalVentas = itemsDia.filter(m => m.tipo === 'venta' && !m.anulado).reduce((a, m) => a + m.monto, 0);
+          const totalGastos = itemsDia.filter(m => m.tipo === 'gasto' && !m.anulado).reduce((a, m) => a + m.monto, 0);
           const totalBajas = itemsDia.filter(m => m.tipo === 'merma').reduce((a, m) => a + m.cantidad, 0);
           const abierto = f === diaAbierto;
           return `
@@ -1523,14 +1589,14 @@ async function pantallaHistorial() {
               <div style="margin-top:10px;">
                 ${itemsDia.map(m => {
                   if (m.tipo === 'venta') return `
-                  <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
-                    <span class="t-body">${m.cantidad > 1 ? m.cantidad + 'x ' : ''}${m.producto} <span class="t-secondary">${m.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span></span>
-                    <strong>${m.monto.toFixed(2)} Bs</strong>
+                  <div class="row ${m.anulado ? 'anulada' : ''}" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="t-body">${m.cantidad > 1 ? m.cantidad + 'x ' : ''}${m.producto} <span class="t-secondary">${m.formaPago === 'qr' ? 'QR' : 'Efectivo'}</span>${m.anulado ? ` <span class="badge badge-danger">Anulada</span> <span class="t-secondary">${escHtml(m.anuladoMotivo || '')}</span>` : ''}</span>
+                    <span style="display:flex;align-items:center;"><strong>${m.monto.toFixed(2)} Bs</strong>${puedeAnular(m) ? `<button class="link-anular" data-anular="venta:${m.id}">Anular</button>` : ''}</span>
                   </div>`;
                   if (m.tipo === 'gasto') return `
-                  <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
-                    <span class="t-body">${m.motivo} <span class="badge badge-danger">Gasto</span></span>
-                    <strong style="color:var(--danger);">−${m.monto.toFixed(2)} Bs</strong>
+                  <div class="row ${m.anulado ? 'anulada' : ''}" style="padding:6px 0;border-bottom:1px solid var(--border);">
+                    <span class="t-body">${m.motivo} <span class="badge badge-danger">${m.anulado ? 'Gasto anulado' : 'Gasto'}</span>${m.anulado ? ` <span class="t-secondary">${escHtml(m.anuladoMotivo || '')}</span>` : ''}</span>
+                    <span style="display:flex;align-items:center;"><strong style="color:var(--danger);">−${m.monto.toFixed(2)} Bs</strong>${puedeAnular(m) ? `<button class="link-anular" data-anular="gasto:${m.id}">Anular</button>` : ''}</span>
                   </div>`;
                   if (m.tipo === 'retiro') return `
                   <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
@@ -1563,6 +1629,12 @@ async function pantallaHistorial() {
     document.querySelectorAll('[data-dia]').forEach(el => {
       el.onclick = () => { diaAbierto = diaAbierto === el.dataset.dia ? null : el.dataset.dia; render(); };
     });
+    document.querySelectorAll('[data-anular]').forEach(b => { b.onclick = async ev => {
+      ev.stopPropagation();
+      const [t, id] = b.dataset.anular.split(':');
+      const m = movimientos.find(x => x.tipo === t && x.id === id);
+      if (m && await anularMovimiento(t, m)) render();
+    }; });
     document.querySelectorAll('[data-nav]').forEach(b => {
       b.onclick = () => {
         if (b.dataset.nav === 'inicio') pantallaPrincipal().catch(e => mostrarError('volver a inicio', e));
@@ -1602,11 +1674,12 @@ async function pantallaCaja() {
       let efectivo = 0, total = 0;
       snapVentas.forEach(doc => {
         const v = doc.data();
+        if (v.anulado) return;
         total += v.monto;
         if (v.formaPago === 'efectivo') efectivo += v.monto;
       });
       let gastosTotal = 0;
-      snapGastos.forEach(doc => { gastosTotal += doc.data().monto; });
+      snapGastos.forEach(doc => { if (!doc.data().anulado) gastosTotal += doc.data().monto; });
       efectivo = Math.max(0, efectivo - gastosTotal);
       total = Math.max(0, total - gastosTotal);
       await guardarSinBloquear(compRef.set({ cajaEfectivo: efectivo, cajaTotal: total, cajaInicializada: true }, { merge: true }));
@@ -1622,8 +1695,8 @@ async function pantallaCaja() {
       gastosRef.where('fecha', '==', hoy).get(),
       gastosRef.where('fecha', '>=', primerDiaMes).get()
     ]), 15000, 'cargar gastos');
-    gastosHoy = snapG.docs.map(doc => doc.data());
-    gastosMes = snapGMes.docs.reduce((a, doc) => a + doc.data().monto, 0);
+    gastosHoy = snapG.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    gastosMes = snapGMes.docs.reduce((a, doc) => a + (doc.data().anulado ? 0 : doc.data().monto), 0);
   } catch (e) {
     return mostrarError('cargar caja', e);
   }
@@ -1661,12 +1734,12 @@ async function pantallaCaja() {
           <span>Total de gastos este mes</span>
           <strong style="color:var(--danger);">−${gastosMes.toFixed(2)} Bs</strong>
         </div>
-        <div class="t-eyebrow" style="margin-top:var(--space-2);">Gastos de hoy (${gastosHoy.length})</div>
+        <div class="t-eyebrow" style="margin-top:var(--space-2);">Gastos de hoy (${gastosHoy.filter(g => !g.anulado).length})</div>
         <div class="card-flat">
           ${gastosHoy.length === 0 ? `<div class="t-secondary">Sin gastos registrados hoy.</div>` : gastosHoy.map(g => `
-            <div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);">
-              <span class="t-body">${g.motivo}</span>
-              <strong style="color:var(--danger);">−${g.monto.toFixed(2)} Bs</strong>
+            <div class="row ${g.anulado ? 'anulada' : ''}" style="padding:6px 0;border-bottom:1px solid var(--border);">
+              <span class="t-body">${g.motivo}${g.anulado ? ` <span class="badge badge-danger">Anulado</span> <span class="t-secondary">${escHtml(g.anuladoMotivo || '')}</span>` : ''}</span>
+              <span style="display:flex;align-items:center;"><strong style="color:var(--danger);">−${g.monto.toFixed(2)} Bs</strong>${g.anulado ? '' : `<button class="link-anular" data-anular-gasto="${g.id}">Anular</button>`}</span>
             </div>
           `).join('')}
         </div>
@@ -1699,6 +1772,10 @@ async function pantallaCaja() {
         alert('No se pudo registrar el retiro.');
       }
     };
+    document.querySelectorAll('[data-anular-gasto]').forEach(b => { b.onclick = async () => {
+      const g = gastosHoy.find(x => x.id === b.dataset.anularGasto);
+      if (g && await anularMovimiento('gasto', g)) await pantallaCaja();
+    }; });
     document.getElementById('btn-mostrar-gasto').onclick = () => {
       document.getElementById('form-gasto').style.display = 'block';
       document.getElementById('btn-mostrar-gasto').style.display = 'none';

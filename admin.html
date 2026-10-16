@@ -1113,8 +1113,8 @@ async function pantallaReportes() {
   const V = [], G = [], T = [];
   sucursales.forEach(s => compsDe(s).forEach(c => {
     const base = db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c);
-    T.push(base.collection('ventas').where('fecha', '>=', desde).get().then(q => q.docs.forEach(d => V.push({ ...d.data(), sid: s.id, comp: c }))));
-    T.push(base.collection('gastos').where('fecha', '>=', desde).get().then(q => q.docs.forEach(d => G.push({ ...d.data(), sid: s.id, comp: c }))));
+    T.push(base.collection('ventas').where('fecha', '>=', desde).get().then(q => q.docs.forEach(d => { if (!d.data().anulado) V.push({ ...d.data(), sid: s.id, comp: c }); })));
+    T.push(base.collection('gastos').where('fecha', '>=', desde).get().then(q => q.docs.forEach(d => { if (!d.data().anulado) G.push({ ...d.data(), sid: s.id, comp: c }); })));
   }));
   try { await conTiempoLimite(Promise.all(T), 25000, 'calcular reportes'); } catch (e) { return mostrarError('calcular reportes', e); }
 
@@ -1596,8 +1596,8 @@ async function pantallaDatos() {
     lista.forEach(s => {
       compsDe(s).forEach(c => {
         const base = db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c), area = c === 'pizzeria' ? 'Pizzería' : 'Salteñería';
-        q(base.collection('ventas'), 'Venta', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, x.producto, x.cantidad || 1, x.precioUnitario || '', x.monto, x.formaPago === 'qr' ? 'QR' : 'Efectivo']);
-        q(base.collection('gastos'), 'Gasto', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, x.motivo, '', '', x.monto, '']);
+        q(base.collection('ventas'), 'Venta', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, x.anulado ? t + ' anulada' : t, x.producto + (x.anulado ? ' (motivo: ' + (x.anuladoMotivo || '') + ')' : ''), x.cantidad || 1, x.precioUnitario || '', x.anulado ? '' : x.monto, x.formaPago === 'qr' ? 'QR' : 'Efectivo']);
+        q(base.collection('gastos'), 'Gasto', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, x.anulado ? t + ' anulado' : t, x.motivo + (x.anulado ? ' (motivo: ' + (x.anuladoMotivo || '') + ')' : ''), '', '', x.anulado ? '' : x.monto, '']);
         q(base.collection('mermas'), 'Baja', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, x.producto + (x.motivo ? ' (' + x.motivo + ')' : ''), x.cantidad, '', '', '']);
         q(base.collection('retiros'), 'Retiro de caja', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, 'Efectivo ' + (x.efectivo || 0) + ' · QR ' + (x.qr || 0), '', '', x.total, '']);
       });
