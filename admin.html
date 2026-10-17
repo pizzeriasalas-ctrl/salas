@@ -355,6 +355,16 @@ body{
 .sa b{text-align:right;white-space:nowrap}.sa > span:nth-child(2){text-align:right;white-space:nowrap;font-size:.82rem}
 .sa-h{font-size:.72rem;color:var(--text-secondary);font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-top:8px}
 .sa-h span:nth-child(n+2){text-align:right}
+
+/* --- Pulido: transiciones suaves y respuesta al tocar --- */
+.btn,.card,.card-flat,.sucursal-item,.header-btn{transition:transform .12s ease,box-shadow .2s ease,filter .15s ease,background .2s ease}
+.btn:active,.sucursal-item:active,.header-btn:active{transform:scale(.97)}
+.card:active[data-suc]{transform:scale(.99)}
+.prog > i,.pista > i{transition:width .5s ease}
+@keyframes aparecer{from{opacity:0}to{opacity:1}}
+.px>*,.content>*{animation:aparecer .22s ease both}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.mov.anulada{opacity:.55}.mov.anulada .mt,.mov.anulada .mm{text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -418,7 +428,23 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err => {
   parchar(F.DocumentReference, true);
   parchar(F.Query, false);
 })();
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+
+// Aviso de versión nueva: cuando el service worker nuevo toma el control, ofrece recargar
+function mostrarAvisoActualizar() {
+  if (document.getElementById('aviso-act')) return;
+  const b = document.createElement('div'); b.id = 'aviso-act';
+  b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:80;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:14px;background:var(--accent);color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.25);font-weight:600;font-size:.9rem;';
+  b.innerHTML = '<span>Hay una versión nueva de la app</span><button id="aviso-act-btn" style="background:#fff;color:var(--accent);border:0;border-radius:10px;padding:8px 14px;font-weight:800;cursor:pointer;">Actualizar</button>';
+  document.body.appendChild(b);
+  document.getElementById('aviso-act-btn').onclick = () => location.reload();
+}
+if ('serviceWorker' in navigator) {
+  const teniaControl = !!navigator.serviceWorker.controller;
+  let regSW = null;
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(r => { regSW = r; }).catch(() => {}));
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (teniaControl) mostrarAvisoActualizar(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && regSW) regSW.update().catch(() => {}); });
+}
 (function () {
   let t;
   function mostrar(txt, cls, ms) {
@@ -941,13 +967,15 @@ async function pantallaDetalleSucursal(s) {
   const comps = compsDe(s);
   let detalle;
   try {
-    const docs = await conTiempoLimite(Promise.all(comps.map(c =>
-      db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).get()
-    )), 15000, 'cargar detalle de la sucursal');
+    const [docs, cierresSnaps] = await conTiempoLimite(Promise.all([
+      Promise.all(comps.map(c => db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).get())),
+      Promise.all(comps.map(c => db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c).collection('cierres').orderBy('creadoEn', 'desc').limit(5).get().catch(() => null)))
+    ]), 15000, 'cargar detalle de la sucursal');
     detalle = comps.map((c, i) => ({
       compartimento: c,
       cajaEfectivo: docs[i].exists ? (docs[i].data().cajaEfectivo || 0) : 0,
-      cajaTotal: docs[i].exists ? (docs[i].data().cajaTotal || 0) : 0
+      cajaTotal: docs[i].exists ? (docs[i].data().cajaTotal || 0) : 0,
+      cierres: cierresSnaps[i] ? cierresSnaps[i].docs.map(x => x.data()) : []
     }));
   } catch (e) {
     return mostrarError('cargar el detalle de la sucursal', e);
@@ -963,6 +991,11 @@ async function pantallaDetalleSucursal(s) {
       <div class="px stack">
         <div class="t-secondary">${s.zona || 'Sucursal'}</div>
         <button class="btn btn-primary" id="btn-historial">Ver ventas y gastos por día</button>
+        <div class="card">
+          <div class="field"><label>Meta de ventas diaria (Bs)</label><input type="number" id="in-meta" inputmode="decimal" value="${s.metaDiaria > 0 ? s.metaDiaria : ''}" placeholder="Sin meta"></div>
+          <button class="btn btn-secondary" id="btn-meta" style="margin-top:10px;">Guardar meta</button>
+          <div class="t-secondary" id="meta-msg" style="margin-top:6px;">Aparece como barra de avance en Reportes. Déjala vacía para quitarla.</div>
+        </div>
         ${detalle.map(d => {
           const comp = (s.compartimentos && s.compartimentos[d.compartimento]) || {};
           return `
@@ -976,6 +1009,14 @@ async function pantallaDetalleSucursal(s) {
               <div class="stat-box"><div class="valor">${(d.cajaTotal - d.cajaEfectivo).toFixed(0)} Bs</div><div class="lbl">${ic('phone',13)} QR</div></div>
               <div class="stat-box"><div class="valor">${d.cajaTotal.toFixed(0)} Bs</div><div class="lbl">Total</div></div>
             </div>
+            <div class="t-eyebrow" style="margin-top:12px;">Últimos cierres de caja</div>
+            ${d.cierres.length === 0 ? `<div class="t-secondary" style="margin-top:4px;">Aún sin cierres de caja.</div>` : d.cierres.map(x => {
+              const dif = x.diferencia || 0, ok = Math.abs(dif) < 0.01, t = x.creadoEn && x.creadoEn.toDate ? x.creadoEn.toDate() : null;
+              const cuando = (x.fecha ? x.fecha.slice(8) + '/' + x.fecha.slice(5, 7) : '') + (t ? ' ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') : '');
+              return `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border);gap:8px;">
+                <span class="t-body" style="flex:1;">${cuando} · contado ${(x.contado || 0).toFixed(2)} Bs<div class="t-secondary">Esperado ${(x.esperado || 0).toFixed(2)} Bs${x.nota ? ' · ' + esc(x.nota) : ''}${x.empleado ? ' · ' + esc(x.empleado) : ''}</div></span>
+                <strong style="color:${ok ? 'var(--up)' : 'var(--down)'};white-space:nowrap;">${ok ? 'Cuadra' : (dif > 0 ? '+' : '−') + Math.abs(dif).toFixed(2)}</strong>
+              </div>`; }).join('')}
             <div class="stat-row" style="margin-top:10px;">
               <button class="btn btn-secondary" data-editar="${d.compartimento}">Editar precios</button>
               <button class="btn btn-secondary" data-empleado="${d.compartimento}">Editar empleado</button>
@@ -992,6 +1033,14 @@ async function pantallaDetalleSucursal(s) {
         <div class="t-secondary" style="text-align:center;">Se oculta de las apps; su historial se conserva.</div>
       </div>
     `;
+    document.getElementById('btn-meta').onclick = async () => {
+      const v = parseFloat(document.getElementById('in-meta').value), msg = document.getElementById('meta-msg');
+      try {
+        await conTiempoLimite(db.collection('sucursales').doc(s.id).update({ metaDiaria: v > 0 ? v : firebase.firestore.FieldValue.delete() }), 10000, 'guardar meta');
+        if (v > 0) s.metaDiaria = v; else delete s.metaDiaria;
+        msg.textContent = v > 0 ? 'Meta guardada: ' + v + ' Bs por día.' : 'Meta quitada.';
+      } catch (e) { msg.textContent = 'No se pudo guardar. Revisa tu conexión.'; }
+    };
     document.getElementById('btn-historial').onclick = () => pantallaHistorialSucursal(s, hoyISO(), () => pantallaDetalleSucursal(s));
     document.getElementById('btn-eliminar-suc').onclick = () => {
       if (!confirm('¿Eliminar "' + s.nombre + '"? Dejará de aparecer en las apps de los empleados.')) return;
@@ -1151,10 +1200,11 @@ function comparar(actual, previo, ref, enCurso) {
   const dif = actual - previo;
   if (actual === 0 && previo === 0) return { txt: 'Todavía no hay ventas para comparar', cls: 'eq', ic: '＝' };
   const ini = enCurso ? 'Hoy llevas ' : 'Vendiste ';
+  const pct = previo > 0 ? Math.round(Math.abs(dif) / previo * 100) : null;
   if (Math.abs(dif) < 0.5) return { txt: (enCurso ? 'Hoy llevas lo mismo que ' : 'Vendiste lo mismo que ') + ref, cls: 'eq', ic: '＝' };
   return dif > 0
-    ? { txt: ini + bsN(dif) + ' más que ' + ref, cls: 'up', ic: '▲' }
-    : { txt: ini + bsN(-dif) + ' menos que ' + ref, cls: 'down', ic: '▼' };
+    ? { txt: ini + bsN(dif) + ' más que ' + ref + (pct !== null ? ' (' + pct + '% más)' : ''), cls: 'up', ic: '▲' }
+    : { txt: ini + bsN(-dif) + ' menos que ' + ref + (pct !== null ? ' (' + pct + '% menos)' : ''), cls: 'down', ic: '▼' };
 }
 // Dona simple (SVG, funciona sin internet). partes: [{n, v, color}]
 function dona(partes) {
@@ -1246,6 +1296,25 @@ async function pantallaReportes() {
   const maxF = Math.max(1, ...filas.map(x => x.v));
   const mejor = filas.length > 1 && maxF > 1 ? filas.findIndex(x => x.v === maxF) : -1;
 
+  // ---- Metas de hoy ----
+  const conMeta = sucursales.filter(s => s.metaDiaria > 0).map(s => { const v = suma(V.filter(x => x.fecha === hoy && x.sid === s.id), 'monto'); return { s, v, p: v / s.metaDiaria }; });
+
+  // ---- Horas pico y días más fuertes ----
+  const baseIni = n === 1 ? sumarDias(hoy, -6) : ini;
+  const etiquetaBase = n === 1 ? 'los últimos 7 días' : ({ '7': 'los últimos 7 días', '30': 'los últimos 30 días' }[periodoRep] || 'este período');
+  const baseH = V.filter(v => v.fecha >= baseIni);
+  const hh = {};
+  baseH.forEach(v => { if (v.creadoEn && v.creadoEn.toDate) { const k = v.creadoEn.toDate().getHours(); hh[k] = (hh[k] || 0) + (v.monto || 0); } });
+  const horasTop = Object.entries(hh).map(([k, m]) => ({ k: +k, m })).sort((a, b) => b.m - a.m).slice(0, 5);
+  const maxH = Math.max(1, ...horasTop.map(x => x.m));
+  const NOMD = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const occ = [0, 0, 0, 0, 0, 0, 0], sumD = [0, 0, 0, 0, 0, 0, 0];
+  for (let f = baseIni; f <= ayer; f = sumarDias(f, 1)) occ[new Date(f + 'T12:00:00').getDay()]++;
+  V.filter(v => v.fecha >= baseIni && v.fecha <= ayer).forEach(v => { sumD[new Date(v.fecha + 'T12:00:00').getDay()] += v.monto || 0; });
+  const dias = [1, 2, 3, 4, 5, 6, 0].map(d => ({ nom: NOMD[d], avg: occ[d] ? sumD[d] / occ[d] : 0 }));
+  const maxD = Math.max(1, ...dias.map(x => x.avg));
+  const mejorD = dias.reduce((b, x) => x.avg > b.avg ? x : b, dias[0]);
+
   // ---- Sucursales y productos ----
   const porSuc = sucursales.map(s => ({ s, v: suma(act.filter(x => x.sid === s.id), 'monto'), p: suma(prev.filter(x => x.sid === s.id), 'monto') })).sort((a, b) => b.v - a.v);
   const maxS = Math.max(1, ...porSuc.map(x => x.v));
@@ -1320,6 +1389,25 @@ async function pantallaReportes() {
           ${mejor >= 0 ? `<div class="t-secondary" style="margin-top:8px;">⭐ ${n === 1 ? 'La mejor hora fue las ' + filas[mejor].nom : 'El mejor día fue ' + (filas[mejor].nom === 'Hoy' || filas[mejor].nom === 'Ayer' ? filas[mejor].nom.toLowerCase() : filas[mejor].nom)}, con ${bs(maxF)}.</div>` : ''}
           ${sinHora > 0 ? `<div class="t-secondary" style="margin-top:4px;">Además, ${bs(sinHora)} se están sincronizando y aún no tienen hora.</div>` : ''}
         </div>
+
+        ${conMeta.length ? `<div class="ttl">Meta de ventas de hoy</div>
+        <div class="card">${conMeta.map((x, i) => `<div style="${i ? 'margin-top:14px;' : ''}">
+          <div class="row"><b>${esc(x.s.nombre)}</b><span class="t-secondary">${bs(x.v)} de ${bs(x.s.metaDiaria)}</span></div>
+          <div class="prog"><i style="width:${Math.min(100, x.p * 100)}%;${x.p >= 1 ? 'background:var(--up);' : ''}"></i></div>
+          <div class="t-secondary" style="margin-top:3px;">${x.p >= 1 ? '✔ Meta cumplida' : Math.round(x.p * 100) + '% de la meta'}</div>
+        </div>`).join('')}</div>` : ''}
+
+        ${horasTop.length ? `<div class="ttl">Horas pico (${etiquetaBase})</div>
+        <div class="card">
+          ${horasTop.map((x, i) => `<div class="fila ${i === 0 ? 'mejor' : ''}"><div class="nom">${x.k}:00</div><div class="pista"><i class="${i === 0 ? 'up' : 'ac'}" style="width:${x.m / maxH * 100}%"></i></div><div class="mon">${i === 0 ? '⭐ ' : ''}${bs(x.m)}</div></div>`).join('')}
+          <div class="t-secondary" style="margin-top:8px;">Las horas donde más se vende, de mayor a menor.</div>
+        </div>` : ''}
+
+        ${dias.some(x => x.avg > 0) ? `<div class="ttl">Días más fuertes (${etiquetaBase})</div>
+        <div class="card">
+          ${dias.map(x => `<div class="fila ${x.nom === mejorD.nom ? 'mejor' : ''}"><div class="nom">${x.nom.slice(0, 3)}</div><div class="pista"><i class="${x.nom === mejorD.nom ? 'up' : 'ac'}" style="width:${x.avg / maxD * 100}%"></i></div><div class="mon">${x.nom === mejorD.nom ? '⭐ ' : ''}${bs(x.avg)}</div></div>`).join('')}
+          <div class="t-secondary" style="margin-top:8px;">Promedio vendido por cada ${n === 1 ? 'día' : 'día de la semana'}, sin contar hoy.</div>
+        </div>` : ''}
 
         <div class="ttl">¿Cómo nos pagaron? (${etiqueta})</div>
         <div class="card">${dona([{ n: 'Efectivo', v: efectivo, color: 'var(--accent)' }, { n: 'QR', v: qr, color: 'var(--amber)' }])}</div>
@@ -1428,13 +1516,13 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
     const dia = cache[fecha] || { V: [], G: [], C: [] };
     const V = dia.V.filter(filtra).sort((a, b) => tiempo(b) - tiempo(a));
     const G = dia.G.filter(filtra).sort((a, b) => tiempo(b) - tiempo(a));
-    const tV = V.reduce((a, x) => a + (x.monto || 0), 0), tG = G.reduce((a, x) => a + (x.monto || 0), 0);
-    const ef = V.filter(x => x.formaPago === 'efectivo').reduce((a, x) => a + (x.monto || 0), 0);
+    const tV = V.filter(x => !x.anulado).reduce((a, x) => a + (x.monto || 0), 0), tG = G.filter(x => !x.anulado).reduce((a, x) => a + (x.monto || 0), 0);
+    const ef = V.filter(x => x.formaPago === 'efectivo' && !x.anulado).reduce((a, x) => a + (x.monto || 0), 0);
     const [a, m, d] = fecha.split('-').map(Number);
     const largo = new Date(a, m - 1, d).toLocaleDateString('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
     const dias = []; for (let i = 0; i < 14; i++) dias.push(sumarDias(hoy, -i));
     if (!dias.includes(fecha)) dias.unshift(fecha);
-    const totDia = f => ((cache[f] || { V: [] }).V.filter(filtra)).reduce((acc, x) => acc + (x.monto || 0), 0);
+    const totDia = f => ((cache[f] || { V: [] }).V.filter(x => filtra(x) && !x.anulado)).reduce((acc, x) => acc + (x.monto || 0), 0);
     app.innerHTML = `
       <div class="header">
         <button class="header-btn" id="btn-atras">${ic('back')}</button>
@@ -1462,7 +1550,7 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
           </div>
         </div>
 
-        ${comps.length > 1 && area === 'todo' ? `<div class="card">${comps.map((c, i) => { const v = dia.V.filter(x => x.comp === c).reduce((a, x) => a + (x.monto || 0), 0), g = dia.G.filter(x => x.comp === c).reduce((a, x) => a + (x.monto || 0), 0); return `<div class="sa" style="${i ? '' : 'border-top:none;padding-top:0;'}"><span><i style="background:${c === 'pizzeria' ? 'var(--accent)' : 'var(--amber)'}"></i>${NOMBRE_AREA[c]}</span><span class="t-secondary">${bs(v)} − ${bs(g)}</span><b style="color:${v - g >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(v - g)}</b></div>`; }).join('')}<div class="t-secondary" style="margin-top:6px;">Ventas − gastos = ganancia de cada área</div></div>` : ''}
+        ${comps.length > 1 && area === 'todo' ? `<div class="card">${comps.map((c, i) => { const v = dia.V.filter(x => x.comp === c && !x.anulado).reduce((a, x) => a + (x.monto || 0), 0), g = dia.G.filter(x => x.comp === c && !x.anulado).reduce((a, x) => a + (x.monto || 0), 0); return `<div class="sa" style="${i ? '' : 'border-top:none;padding-top:0;'}"><span><i style="background:${c === 'pizzeria' ? 'var(--accent)' : 'var(--amber)'}"></i>${NOMBRE_AREA[c]}</span><span class="t-secondary">${bs(v)} − ${bs(g)}</span><b style="color:${v - g >= 0 ? 'var(--up)' : 'var(--down)'}">${bs(v - g)}</b></div>`; }).join('')}<div class="t-secondary" style="margin-top:6px;">Ventas − gastos = ganancia de cada área</div></div>` : ''}
 
         <div class="ttl">Stock: lo que queda ahora</div>
         <div class="card">${stockHtml()}</div>
@@ -1471,23 +1559,23 @@ async function pantallaHistorialSucursal(s, fecha, volver) {
         <div class="card">${[...dia.C].sort((x, y) => tiempo(x) - tiempo(y)).map((x, i) => { const dif = x.diferencia || 0, ok = Math.abs(dif) < 0.01;
           return `<div class="mov" ${i === 0 ? 'style="border-top:none"' : ''}>
             <div class="mh">${hhmm(hora(x))}</div>
-            <div><div class="mt">${comps.length > 1 ? NOMBRE_AREA[x.comp] + ' · ' : ''}Contado ${(x.contado || 0).toFixed(2)} Bs</div><div class="t-secondary">Esperado ${(x.esperado || 0).toFixed(2)} Bs${x.nota ? ' · ' + esc(x.nota) : ''}</div></div>
+            <div><div class="mt">${comps.length > 1 ? NOMBRE_AREA[x.comp] + ' · ' : ''}Contado ${(x.contado || 0).toFixed(2)} Bs</div><div class="t-secondary">Esperado ${(x.esperado || 0).toFixed(2)} Bs${x.nota ? ' · ' + esc(x.nota) : ''}${x.empleado ? ' · ' + esc(x.empleado) : ''}</div></div>
             <div class="mm" style="color:${ok ? 'var(--up)' : 'var(--down)'}">${ok ? 'Cuadra' : (dif > 0 ? '+' : '−') + Math.abs(dif).toFixed(2)}</div>
           </div>`; }).join('')}</div>` : ''}
 
         <div class="ttl">Ventas</div>
         <div class="card">${V.length === 0 ? `<div class="empty-state" style="padding:14px 0;">No hubo ventas este día.</div>` : V.map((x, i) => `
-          <div class="mov" ${i === 0 ? 'style="border-top:none"' : ''}>
+          <div class=\"mov ${x.anulado ? 'anulada' : ''}\" ${i === 0 ? 'style="border-top:none"' : ''}>
             <div class="mh">${hhmm(hora(x))}</div>
-            <div><div class="mt">${esc(x.producto)}${(x.cantidad || 1) > 1 ? ' × ' + x.cantidad : ''}</div><div class="t-secondary">${comps.length > 1 ? NOMBRE_AREA[x.comp] + ' · ' : ''}${x.formaPago === 'efectivo' ? 'Efectivo' : 'QR'}</div></div>
+            <div><div class="mt">${esc(x.producto)}${(x.cantidad || 1) > 1 ? ' × ' + x.cantidad : ''}${x.anulado ? ' <span class="badge badge-danger">Anulada</span>' : ''}</div><div class="t-secondary">${comps.length > 1 ? NOMBRE_AREA[x.comp] + ' · ' : ''}${x.formaPago === 'efectivo' ? 'Efectivo' : 'QR'}${x.empleado ? ' · ' + esc(x.empleado) : ''}${x.anulado ? ' · ' + esc(x.anuladoMotivo || '') + (x.anuladoPor ? ' (anuló ' + esc(x.anuladoPor) + ')' : '') : ''}</div></div>
             <div class="mm">${bs(x.monto || 0)}</div>
           </div>`).join('')}</div>
 
         <div class="ttl">Gastos</div>
         <div class="card">${G.length === 0 ? `<div class="empty-state" style="padding:14px 0;">No hubo gastos este día.</div>` : G.map((x, i) => `
-          <div class="mov" ${i === 0 ? 'style="border-top:none"' : ''}>
+          <div class=\"mov ${x.anulado ? 'anulada' : ''}\" ${i === 0 ? 'style="border-top:none"' : ''}>
             <div class="mh">${hhmm(hora(x))}</div>
-            <div><div class="mt">${esc(x.motivo || 'Gasto')}</div>${comps.length > 1 ? `<div class="t-secondary">${NOMBRE_AREA[x.comp]}</div>` : ''}</div>
+            <div><div class="mt">${esc(x.motivo || 'Gasto')}${x.anulado ? ' <span class="badge badge-danger">Anulado</span>' : ''}</div><div class="t-secondary">${comps.length > 1 ? NOMBRE_AREA[x.comp] : ''}${x.empleado ? (comps.length > 1 ? ' · ' : '') + esc(x.empleado) : ''}${x.anulado ? ' · ' + esc(x.anuladoMotivo || '') + (x.anuladoPor ? ' (anuló ' + esc(x.anuladoPor) + ')' : '') : ''}</div></div>
             <div class="mm" style="color:var(--down);">− ${bs(x.monto || 0)}</div>
           </div>`).join('')}</div>
 
@@ -1631,18 +1719,99 @@ function armarHojas(filas, lista, rango, hoy) {
   res.push([], [c('Lo más vendido', 9), c('', 9), c('', 9)], cab(['Producto', 'Unidades', 'Monto (Bs)']));
   Object.entries(prod).sort((a, b) => b[1].m - a[1].m).slice(0, 10).forEach(p => res.push([c(p[0], 4), c(p[1].q, 5), c(r2(p[1].m), 3)]));
   const hojas = [{ n: 'Resumen', f: res, anchos: [26, 14, 16, 16, 14, 16, 16, 14], lineas: false }];
-  hojas.push({ n: 'Ventas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 34, 10, 16, 14, 11], est: [4, 4, 4, 4, 4, 5, 3, 3, 4],
-    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Producto', 'Cantidad', 'Precio unit. (Bs)', 'Monto (Bs)', 'Pago']].concat(V.map(f => [f[0], f[1], f[2], f[3], f[5], f[6], f[7], f[8], f[9]])) });
-  hojas.push({ n: 'Gastos', cab: true, filtro: true, anchos: [12, 8, 22, 13, 40, 14], est: [4, 4, 4, 4, 4, 3],
-    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Motivo', 'Monto (Bs)']].concat(G.map(f => [f[0], f[1], f[2], f[3], f[5], f[8]])) });
-  hojas.push({ n: 'Bajas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 44, 10], est: [4, 4, 4, 4, 4, 5],
-    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Producto (motivo)', 'Cantidad']].concat(Ba.map(f => [f[0], f[1], f[2], f[3], f[5], f[6]])) });
-  hojas.push({ n: 'Retiros de caja', cab: true, filtro: true, anchos: [12, 8, 22, 13, 40, 14], est: [4, 4, 4, 4, 4, 3],
-    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Detalle', 'Total (Bs)']].concat(R.map(f => [f[0], f[1], f[2], f[3], f[5], f[8]])) });
+  const CI = filas.filter(f => f[4] === 'Cierre de caja'), AN = filas.filter(f => /anulad[ao]$/.test(f[4]));
+  const E = f => f[10] || '';
+  hojas.push({ n: 'Ventas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 34, 10, 16, 14, 11, 20], est: [4, 4, 4, 4, 4, 5, 3, 3, 4, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Producto', 'Cantidad', 'Precio unit. (Bs)', 'Monto (Bs)', 'Pago', 'Empleado']].concat(V.map(f => [f[0], f[1], f[2], f[3], f[5], f[6], f[7], f[8], f[9], E(f)])) });
+  hojas.push({ n: 'Gastos', cab: true, filtro: true, anchos: [12, 8, 22, 13, 40, 14, 20], est: [4, 4, 4, 4, 4, 3, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Motivo', 'Monto (Bs)', 'Empleado']].concat(G.map(f => [f[0], f[1], f[2], f[3], f[5], f[8], E(f)])) });
+  hojas.push({ n: 'Bajas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 44, 10, 20], est: [4, 4, 4, 4, 4, 5, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Producto (motivo)', 'Cantidad', 'Empleado']].concat(Ba.map(f => [f[0], f[1], f[2], f[3], f[5], f[6], E(f)])) });
+  hojas.push({ n: 'Retiros de caja', cab: true, filtro: true, anchos: [12, 8, 22, 13, 40, 14, 20], est: [4, 4, 4, 4, 4, 3, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Detalle', 'Total (Bs)', 'Empleado']].concat(R.map(f => [f[0], f[1], f[2], f[3], f[5], f[8], E(f)])) });
+  hojas.push({ n: 'Cierres de caja', cab: true, filtro: true, anchos: [12, 8, 22, 13, 16, 16, 16, 36, 20], est: [4, 4, 4, 4, 3, 3, 3, 4, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Esperado (Bs)', 'Contado (Bs)', 'Diferencia (Bs)', 'Motivo de la diferencia', 'Empleado']].concat(CI.map(f => [f[0], f[1], f[2], f[3], f[6], f[7], f[8], f[5], E(f)])) });
+  hojas.push({ n: 'Anuladas', cab: true, filtro: true, anchos: [12, 8, 22, 13, 16, 52, 30], est: [4, 4, 4, 4, 4, 4, 4],
+    f: [['Fecha', 'Hora', 'Sucursal', 'Área', 'Tipo', 'Detalle (motivo)', 'Empleado']].concat(AN.map(f => [f[0], f[1], f[2], f[3], f[4], f[5], E(f)])) });
   return hojas;
 }
 
 let rangoDatos = 'mes', sucDatos = 'todas';
+// ============================================================
+// Importar sucursales desde un archivo (carga masiva)
+// ============================================================
+async function pantallaImportar(existentes) {
+  app.innerHTML = `
+    <div class="header"><button class="header-btn" id="btn-atras">${ic('back')}</button><div class="t-subtitle">Importar sucursales</div><div style="width:38px;"></div></div>
+    <div class="px stack">
+      <div class="t-secondary">Elige el archivo <b>sucursales-carga.json</b> (o pega su contenido). Primero se revisa y solo después se importa. Las sucursales que ya existen se omiten.</div>
+      <input type="file" id="in-archivo" accept=".json,application/json">
+      <div class="field"><label>Contenido del archivo</label><textarea id="in-json" rows="7" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);font-size:.8rem;"></textarea></div>
+      <button class="btn btn-secondary" id="btn-revisar">Revisar</button>
+      <div id="import-res" class="stack"></div>
+    </div>
+    ${navInferiorAdmin('datos')}`;
+  document.getElementById('btn-atras').onclick = () => pantallaDatos();
+  wireNavInferiorAdmin();
+  const norm = t => String(t || '').trim().toLowerCase();
+  document.getElementById('in-archivo').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    document.getElementById('in-json').value = await f.text();
+    document.getElementById('btn-revisar').click();
+  };
+  document.getElementById('btn-revisar').onclick = () => {
+    const res = document.getElementById('import-res'); res.innerHTML = '';
+    let datos;
+    try { datos = JSON.parse(document.getElementById('in-json').value); } catch (e) { res.innerHTML = '<div class="error-text">El contenido no es un archivo válido.</div>'; return; }
+    const lista = Array.isArray(datos.sucursales) ? datos.sucursales : [];
+    if (!lista.length) { res.innerHTML = '<div class="error-text">No hay sucursales en el archivo.</div>'; return; }
+    const nombresExistentes = new Set(existentes.map(s => norm(s.nombre)));
+    const pinsUsados = new Set();
+    existentes.forEach(s => Object.values(s.compartimentos || {}).forEach(c => { if (c && c.pin) pinsUsados.add(String(c.pin)); }));
+    const ok = [], omitidas = [], errores = [];
+    lista.forEach(x => {
+      const n = (x.nombre || '').trim();
+      if (!n) { errores.push('Hay una sucursal sin nombre.'); return; }
+      if (nombresExistentes.has(norm(n))) { omitidas.push(n); return; }
+      const pins = [x.pizzeria && x.pizzeria.pin].concat(x.tieneSalteneria ? [x.salteneria && x.salteneria.pin] : []).map(String);
+      const mal = pins.find(p => !/^\d{4}$/.test(p));
+      if (mal !== undefined) { errores.push(n + ': todos los PIN deben tener 4 dígitos.'); return; }
+      const repetido = pins.find(p => pinsUsados.has(p));
+      if (repetido) { errores.push(n + ': el PIN ' + repetido + ' ya lo usa otro empleado.'); return; }
+      pins.forEach(p => pinsUsados.add(p));
+      ok.push(x);
+    });
+    res.innerHTML = `
+      <div class="card"><b>${ok.length}</b> sucursal(es) listas para importar${omitidas.length ? `<div class="t-secondary">Ya existen y se omiten: ${omitidas.map(esc).join(', ')}.</div>` : ''}
+        ${ok.length ? `<div class="t-secondary" style="margin-top:6px;">${ok.map(x => esc(x.nombre)).join(' · ')}</div>` : ''}</div>
+      ${errores.length ? `<div class="error-text">${errores.map(esc).join('<br>')}</div>` : ''}
+      ${ok.length && !errores.length ? '<button class="btn btn-primary" id="btn-importar">Importar ahora</button><div class="t-secondary" id="import-msg"></div>' : ''}`;
+    const bi = document.getElementById('btn-importar');
+    if (!bi) return;
+    bi.onclick = async () => {
+      if (!navigator.onLine) { alert('Conéctate a internet para importar.'); return; }
+      bi.disabled = true; document.getElementById('import-msg').textContent = 'Importando…';
+      try {
+        const batch = db.batch();
+        ok.forEach(x => {
+          const ref = db.collection('sucursales').doc();
+          const compartimentos = { pizzeria: { empleadoNombre: (x.pizzeria.empleado || '').trim() || 'Empleado Pizzería', pin: String(x.pizzeria.pin) } };
+          if (x.tieneSalteneria) compartimentos.salteneria = { empleadoNombre: (x.salteneria.empleado || '').trim() || 'Empleado Salteñería', pin: String(x.salteneria.pin) };
+          batch.set(ref, { nombre: x.nombre.trim(), zona: x.zona || '', orden: x.orden || 99, activo: true, tieneSalteneria: !!x.tieneSalteneria, tieneCajasPizza: !!x.tieneCajasPizza, compartimentos, schemaVersion: 1 });
+          batch.set(ref.collection('compartimentos').doc('pizzeria'), { precios: x.pizzeria.precios || {} }, { merge: true });
+          if (x.tieneSalteneria) batch.set(ref.collection('compartimentos').doc('salteneria'), { precios: x.salteneria.precios || {} }, { merge: true });
+        });
+        await conTiempoLimite(batch.commit(), 30000, 'importar sucursales');
+        document.getElementById('import-msg').textContent = 'Listo: ' + ok.length + ' sucursales importadas.';
+        setTimeout(() => pantallaPanel(), 1200);
+      } catch (e) {
+        bi.disabled = false;
+        document.getElementById('import-msg').textContent = 'No se pudo importar. Revisa tu conexión e intenta de nuevo.';
+      }
+    };
+  };
+}
+
 async function pantallaDatos() {
   app.innerHTML = `<div class="empty-state">Cargando…</div>`;
   let sucursales;
@@ -1658,14 +1827,18 @@ async function pantallaDatos() {
           <button class="btn btn-primary" id="btn-excel">${ic('down', 18)} Descargar Excel</button>
           <div class="error-text" id="datos-msg"></div>
         </div>
-        <div class="t-secondary" style="text-align:center;">Excel con hoja Resumen (por área y total), Ventas, Gastos, Bajas y Retiros.</div>
+        <div class="t-secondary" style="text-align:center;">Excel con hoja Resumen (por área y total), Ventas, Gastos, Bajas, Retiros, Cierres de caja y Anuladas, cada una con el nombre del empleado.</div>
+        <div class="card stack"><div class="t-body"><b>Archivar meses antiguos</b></div><div class="t-secondary">Descarga en Excel todo lo anterior a los últimos 3 meses y, si lo confirmas, lo borra de la app para que siga rápida. Los saldos de caja y el stock no cambian.</div><button class="btn btn-secondary" id="btn-archivar">Archivar y liberar espacio</button></div>
+        <button class="btn btn-secondary" id="btn-importar-suc">Importar sucursales desde archivo</button>
         <button class="btn btn-secondary" id="btn-cerrar-sesion">Cerrar sesión del panel</button>
       </div>
       ${navInferiorAdmin('datos')}`;
     document.getElementById('btn-tema').onclick = () => abrirSelectorTema(render);
     document.querySelectorAll('#seg-r button').forEach(b => { b.onclick = () => { rangoDatos = b.dataset.r; render(); }; });
     document.getElementById('sel-suc').onchange = e => { sucDatos = e.target.value; };
-    document.getElementById('btn-excel').onclick = exportar;
+    document.getElementById('btn-excel').onclick = () => exportar(false);
+    document.getElementById('btn-archivar').onclick = () => exportar(true);
+    document.getElementById('btn-importar-suc').onclick = () => pantallaImportar(sucursales);
     document.getElementById('btn-cerrar-sesion').onclick = async () => {
       if (!navigator.onLine) { alert('Conéctate a internet para cerrar sesión (así no se pierde ningún cambio pendiente).'); return; }
       if (!confirm('¿Cerrar sesión? Para volver a entrar necesitarás tu correo y tu contraseña.')) return;
@@ -1674,33 +1847,47 @@ async function pantallaDatos() {
     };
     wireNavInferiorAdmin();
   }
-  async function exportar() {
+  async function exportar(archivar) {
+    if (archivar && !navigator.onLine) { alert('Conéctate a internet para archivar.'); return; }
+    window.scrollTo(0, 0);
     const msg = document.getElementById('datos-msg'); msg.style.color = 'var(--text-secondary)'; msg.textContent = 'Preparando archivo…';
     const hoy = hoyISO();
-    const desde = rangoDatos === 'mes' ? hoy.slice(0, 8) + '01' : rangoDatos === '90' ? sumarDias(hoy, -90) : '0000-00-00';
-    const filas = [], T = [];
-    const lista = sucursales.filter(s => sucDatos === 'todas' || s.id === sucDatos);
-    const q = (ref, tipo, s, area, fn) => T.push(ref.where('fecha', '>=', desde).get().then(r => r.docs.forEach(d => filas.push(fn(d.data(), tipo, s, area)))));
+    const desde = archivar ? '0000-00-00' : rangoDatos === 'mes' ? hoy.slice(0, 8) + '01' : rangoDatos === '90' ? sumarDias(hoy, -90) : '0000-00-00';
+    const hasta = archivar ? sumarDias(hoy, -90) : null;
+    const filas = [], refs = [], T = [];
+    const lista = archivar ? sucursales : sucursales.filter(s => sucDatos === 'todas' || s.id === sucDatos);
+    const q = (ref, tipo, s, area, fn) => { let qq = ref.where('fecha', '>=', desde); if (hasta) qq = qq.where('fecha', '<', hasta); T.push(qq.get().then(r => r.docs.forEach(d => { filas.push(fn(d.data(), tipo, s, area)); refs.push(d.ref); }))); };
+    const emp = x => x.anulado && x.anuladoPor ? (x.empleado || '') + ' (anuló: ' + x.anuladoPor + ')' : (x.empleado || '');
     const hora = x => (x.creadoEn && x.creadoEn.toDate) ? x.creadoEn.toDate().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }) : '';
     lista.forEach(s => {
       compsDe(s).forEach(c => {
         const base = db.collection('sucursales').doc(s.id).collection('compartimentos').doc(c), area = c === 'pizzeria' ? 'Pizzería' : 'Salteñería';
-        q(base.collection('ventas'), 'Venta', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, x.anulado ? t + ' anulada' : t, x.producto + (x.anulado ? ' (motivo: ' + (x.anuladoMotivo || '') + ')' : ''), x.cantidad || 1, x.precioUnitario || '', x.anulado ? '' : x.monto, x.formaPago === 'qr' ? 'QR' : 'Efectivo']);
-        q(base.collection('gastos'), 'Gasto', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, x.anulado ? t + ' anulado' : t, x.motivo + (x.anulado ? ' (motivo: ' + (x.anuladoMotivo || '') + ')' : ''), '', '', x.anulado ? '' : x.monto, '']);
-        q(base.collection('mermas'), 'Baja', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, x.producto + (x.motivo ? ' (' + x.motivo + ')' : ''), x.cantidad, '', '', '']);
-        q(base.collection('retiros'), 'Retiro de caja', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, 'Efectivo ' + (x.efectivo || 0) + ' · QR ' + (x.qr || 0), '', '', x.total, '']);
+        q(base.collection('ventas'), 'Venta', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, x.anulado ? t + ' anulada' : t, x.producto + (x.anulado ? ' (motivo: ' + (x.anuladoMotivo || '') + ')' : ''), x.cantidad || 1, x.precioUnitario || '', x.anulado ? '' : x.monto, x.formaPago === 'qr' ? 'QR' : 'Efectivo', emp(x)]);
+        q(base.collection('gastos'), 'Gasto', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, x.anulado ? t + ' anulado' : t, x.motivo + (x.anulado ? ' (motivo: ' + (x.anuladoMotivo || '') + ')' : ''), '', '', x.anulado ? '' : x.monto, '', emp(x)]);
+        q(base.collection('mermas'), 'Baja', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, x.producto + (x.motivo ? ' (' + x.motivo + ')' : ''), x.cantidad, '', '', '', emp(x)]);
+        q(base.collection('cierres'), 'Cierre', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, 'Cierre de caja', x.nota || '', x.esperado, x.contado, x.diferencia, '', emp(x)]);
+        q(base.collection('retiros'), 'Retiro de caja', s, area, (x, t) => [x.fecha, hora(x), s.nombre, area, t, 'Efectivo ' + (x.efectivo || 0) + ' · QR ' + (x.qr || 0), '', '', x.total, '', emp(x)]);
       });
-      q(db.collection('sucursales').doc(s.id).collection('mermasCompartidas'), 'Baja', s, 'Compartido', (x, t) => [x.fecha, hora(x), s.nombre, 'Compartido', t, x.producto + (x.motivo ? ' (' + x.motivo + ')' : ''), x.cantidad, '', '', '']);
+      q(db.collection('sucursales').doc(s.id).collection('mermasCompartidas'), 'Baja', s, 'Compartido', (x, t) => [x.fecha, hora(x), s.nombre, 'Compartido', t, x.producto + (x.motivo ? ' (' + x.motivo + ')' : ''), x.cantidad, '', '', '', emp(x)]);
     });
     try { await conTiempoLimite(Promise.all(T), 40000, 'leer el historial'); } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo leer el historial. Revisa tu conexión.'; return; }
-    if (!filas.length) { msg.textContent = 'No hay movimientos en ese período.'; return; }
+    if (!filas.length) { msg.textContent = archivar ? 'No hay nada para archivar: todo es de los últimos 3 meses.' : 'No hay movimientos en ese período.'; return; }
     filas.sort((a, b) => (b[0] + b[1]).localeCompare(a[0] + a[1]));
-    const rango = { mes: 'este mes', '90': 'últimos 3 meses', todo: 'todo el historial' }[rangoDatos] + (sucDatos === 'todas' ? ' · todas las sucursales' : '');
+    const rango = archivar ? 'archivo anterior al ' + hasta + ' · todas las sucursales' : { mes: 'este mes', '90': 'últimos 3 meses', todo: 'todo el historial' }[rangoDatos] + (sucDatos === 'todas' ? ' · todas las sucursales' : '');
     const bytes = crearXlsx(armarHojas(filas, lista, rango, hoy));
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    a.download = 'salas-historial-' + hoy + '.xlsx';
+    a.download = archivar ? 'salas-archivo-antes-de-' + hasta + '.xlsx' : 'salas-historial-' + hoy + '.xlsx';
     document.body.appendChild(a); a.click(); a.remove();
+    if (archivar) {
+      if (!confirm('Se descargó el archivo con ' + filas.length + ' registros anteriores al ' + hasta + '. Revisa que esté en tus descargas.\n\n¿Borrar esos registros de la app para dejarla liviana? Esto no se puede deshacer. Los saldos de caja y el stock no cambian.')) { msg.textContent = 'Archivo descargado. No se borró nada.'; return; }
+      msg.textContent = 'Borrando registros archivados…';
+      try {
+        for (let i = 0; i < refs.length; i += 400) { const b = db.batch(); refs.slice(i, i + 400).forEach(r => b.delete(r)); await conTiempoLimite(b.commit(), 30000, 'borrar archivados'); }
+        msg.textContent = 'Listo: ' + refs.length + ' registros archivados y borrados de la app.';
+      } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo borrar todo. El archivo ya está descargado; intenta de nuevo.'; }
+      return;
+    }
     msg.textContent = filas.length + ' movimientos exportados.';
   }
   render();

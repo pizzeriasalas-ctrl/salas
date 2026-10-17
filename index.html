@@ -287,6 +287,15 @@ body{
 @keyframes fade{from{opacity:0}}
 @keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* --- Pulido: transiciones suaves y respuesta al tocar --- */
+.btn,.card,.card-flat,.sucursal-item,.header-btn{transition:transform .12s ease,box-shadow .2s ease,filter .15s ease,background .2s ease}
+.btn:active,.sucursal-item:active,.header-btn:active{transform:scale(.97)}
+.card:active[data-suc]{transform:scale(.99)}
+.prog > i,.pista > i{transition:width .5s ease}
+@keyframes aparecer{from{opacity:0}to{opacity:1}}
+.px>*,.content>*{animation:aparecer .22s ease both}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -354,8 +363,22 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err => {
 })();
 
 // Instalable + funciona sin internet
+
+// Aviso de versión nueva: cuando el service worker nuevo toma el control, ofrece recargar
+function mostrarAvisoActualizar() {
+  if (document.getElementById('aviso-act')) return;
+  const b = document.createElement('div'); b.id = 'aviso-act';
+  b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:80;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:14px;background:var(--accent);color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.25);font-weight:600;font-size:.9rem;';
+  b.innerHTML = '<span>Hay una versión nueva de la app</span><button id="aviso-act-btn" style="background:#fff;color:var(--accent);border:0;border-radius:10px;padding:8px 14px;font-weight:800;cursor:pointer;">Actualizar</button>';
+  document.body.appendChild(b);
+  document.getElementById('aviso-act-btn').onclick = () => location.reload();
+}
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  const teniaControl = !!navigator.serviceWorker.controller;
+  let regSW = null;
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(r => { regSW = r; }).catch(() => {}));
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (teniaControl) mostrarAvisoActualizar(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && regSW) regSW.update().catch(() => {}); });
 }
 
 // Indicador discreto de conexión / sincronización
@@ -502,6 +525,9 @@ function guardarSinBloquear(promesa) {
   return Promise.resolve();
 }
 
+function quienSoy() {
+  try { const c = sucursalActual.compartimentos[compartimentoActual]; return ((c && c.empleadoNombre) || '').replace(' (prueba)', ''); } catch (e) { return ''; }
+}
 function escHtml(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function referenciaStock(producto) {
@@ -580,7 +606,7 @@ async function anularMovimiento(tipo, m) {
     const c = sc.exists ? sc.data() : {};
     const esEf = m.formaPago === 'efectivo';
     if (esVenta && ((c.cajaTotal || 0) + 0.01 < m.monto || (esEf && (c.cajaEfectivo || 0) + 0.01 < m.monto))) throw new Error('CAJA_RETIRADA');
-    await guardarSinBloquear(docRef.update({ anulado: true, anuladoMotivo: motivo, anuladoEn: firebase.firestore.Timestamp.now() }));
+    await guardarSinBloquear(docRef.update({ anulado: true, anuladoMotivo: motivo, anuladoPor: quienSoy(), anuladoEn: firebase.firestore.Timestamp.now() }));
     if (esVenta) {
       const r = referenciaStock(m.producto);
       if (r) await guardarSinBloquear(r.set({ producto: r.nombreCorto, cantidad: inc(m.cantidad) }, { merge: true }));
@@ -982,7 +1008,7 @@ async function pantallaPrincipal() {
       const precioFijo = preciosActuales[nombre];
       if (precioFijo != null) {
         inMonto.value = precioFijo;
-        inMonto.readOnly = true;
+        inMonto.readOnly = !(nombre === 'Café' || nombre === 'Té'); // café y té: se puede cambiar el monto (venta rápida)
       } else {
         inMonto.value = '';
         inMonto.readOnly = false;
@@ -1047,7 +1073,7 @@ async function pantallaPrincipal() {
           l.refStock = referenciaStock(l.producto);
           if (l.refStock) await guardarSinBloquear(l.refStock.set({ producto: l.refStock.nombreCorto, cantidad: inc(-l.cantidad) }, { merge: true }));
           l.ref = ventasRef.doc();
-          await guardarSinBloquear(l.ref.set({ producto: l.producto, cantidad: l.cantidad, precioUnitario: l.unitario, monto: l.monto, formaPago: fp, fecha: hoyISO(), creadoEn: firebase.firestore.Timestamp.now(), schemaVersion: 1 }));
+          await guardarSinBloquear(l.ref.set({ producto: l.producto, cantidad: l.cantidad, precioUnitario: l.unitario, monto: l.monto, formaPago: fp, fecha: hoyISO(), empleado: quienSoy(), creadoEn: firebase.firestore.Timestamp.now(), schemaVersion: 1 }));
           total += l.monto;
         }
         // La caja se acumula hasta que la dueña la retira (no se reinicia cada día)
@@ -1065,9 +1091,11 @@ async function pantallaPrincipal() {
     const u = ultimaVenta; if (!u) return;
     if (!confirm(`¿Deshacer la última venta de ${bs(u.total)}?`)) return;
     ultimaVenta = null;
+    // No se borra: la venta queda anulada y registrada (así nadie puede borrar ventas)
+    const ahora = firebase.firestore.Timestamp.now(), quien = quienSoy();
     for (const l of u.lineas) {
       if (l.refStock) await guardarSinBloquear(l.refStock.set({ producto: l.refStock.nombreCorto, cantidad: inc(l.cantidad) }, { merge: true }));
-      await guardarSinBloquear(l.ref.delete());
+      await guardarSinBloquear(l.ref.update({ anulado: true, anuladoMotivo: 'Deshecha al instante', anuladoPor: quien, anuladoEn: ahora }));
     }
     await guardarSinBloquear(compRef.set({ cajaEfectivo: inc(u.formaPago === 'efectivo' ? -u.total : 0), cajaTotal: inc(-u.total) }, { merge: true }));
     await render();
@@ -1469,7 +1497,7 @@ function pantallaDarDeBaja(items, actuales, volver) {
               producto: it.nombreCorto, cantidad, motivo,
               realizadoPor: compartimentoActual,
               fecha: hoyISO(),
-              creadoEn: firebase.firestore.Timestamp.now(),
+              empleado: quienSoy(), creadoEn: firebase.firestore.Timestamp.now(),
               schemaVersion: 1
             }));
           } else {
@@ -1478,7 +1506,7 @@ function pantallaDarDeBaja(items, actuales, volver) {
             await guardarSinBloquear(compRefBaja.collection('mermas').doc().set({
               producto: it.nombreCorto, cantidad, motivo,
               fecha: hoyISO(),
-              creadoEn: firebase.firestore.Timestamp.now(),
+              empleado: quienSoy(), creadoEn: firebase.firestore.Timestamp.now(),
               schemaVersion: 1
             }));
           }
@@ -1779,7 +1807,7 @@ async function pantallaCaja() {
         await guardarSinBloquear(compRef.collection('retiros').doc().set({
           efectivo, qr: Math.max(0, total - efectivo), total,
           fecha: hoyISO(),
-          creadoEn: firebase.firestore.Timestamp.now(),
+          empleado: quienSoy(), creadoEn: firebase.firestore.Timestamp.now(),
           schemaVersion: 1
         }));
         await guardarSinBloquear(compRef.set({ cajaEfectivo: 0, cajaTotal: 0 }, { merge: true }));
@@ -1819,7 +1847,7 @@ async function pantallaCaja() {
         err.textContent = '';
         await guardarSinBloquear(compRef.collection('cierres').doc().set({
           fecha: hoyISO(), esperado, contado: Math.round(contado * 100) / 100, diferencia, nota: Math.abs(diferencia) >= 0.01 ? nota : '',
-          creadoEn: firebase.firestore.Timestamp.now(), schemaVersion: 1
+          empleado: quienSoy(), creadoEn: firebase.firestore.Timestamp.now(), schemaVersion: 1
         }));
         await pantallaCaja();
       } catch (e) {
@@ -1847,7 +1875,7 @@ async function pantallaCaja() {
         await guardarSinBloquear(gastosRef.doc().set({
           motivo, monto,
           fecha: hoyISO(),
-          creadoEn: firebase.firestore.Timestamp.now(),
+          empleado: quienSoy(), creadoEn: firebase.firestore.Timestamp.now(),
           schemaVersion: 1
         }));
         await guardarSinBloquear(compRef.set({
