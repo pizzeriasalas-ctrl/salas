@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#b02a78">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Salas">
@@ -812,7 +812,7 @@ function pantallaElegirCompartimento() {
 // 8) PANTALLA: Ingreso por PIN
 // ============================================================
 function pantallaPin(compartimento) {
-  let pin = '';
+  let pin = '', errorPin = '';
   const nombreComp = compartimento === 'pizzeria' ? 'Pizzería' : 'Salteñería';
 
   function render() {
@@ -835,12 +835,13 @@ function pantallaPin(compartimento) {
         <button data-n="0">0</button>
         <button data-n="ok" class="ok">${ic('check',20)}</button>
       </div>
-      <div class="error-text" id="pin-error" style="margin-top:var(--space-4);"></div>
+      <div class="error-text" id="pin-error" style="margin-top:var(--space-4);">${errorPin}</div>
     `;
     document.getElementById('btn-atras').onclick = pantallaElegirCompartimento;
     document.querySelectorAll('.keypad button').forEach(b => {
       b.onclick = () => {
         const n = b.dataset.n;
+        if (n !== 'ok') errorPin = '';
         if (n === 'borrar') pin = pin.slice(0, -1);
         else if (n === 'ok') validar();
         else if (pin.length < 4) pin += n;
@@ -850,8 +851,8 @@ function pantallaPin(compartimento) {
   }
 
   async function validar() {
-    const comp = sucursalActual.compartimentos[compartimento];
-    if (pin === comp.pin) {
+    const comp = sucursalActual.compartimentos[compartimento] || {};
+    if (pin.length === 4 && pin === String(comp.pin)) {
       compartimentoActual = compartimento;
       app.innerHTML = `<div class="empty-state">Entrando…</div>`;
       try {
@@ -860,7 +861,7 @@ function pantallaPin(compartimento) {
         mostrarError('cargar la pantalla principal', e);
       }
     } else {
-      document.getElementById('pin-error').textContent = 'PIN incorrecto, intenta de nuevo';
+      errorPin = 'PIN incorrecto, intenta de nuevo';
       pin = '';
       render();
     }
@@ -890,16 +891,21 @@ async function pantallaPrincipal() {
       ]
     : [{ id: 'saltena', lbl: ic('empanada',16)+' Salteña' }, { id: 'refresco', lbl: ic('drink',16)+' Refresco' }, { id: 'cafe', lbl: ic('coffee',16)+' Café/Té' }];
   const tabsBase = tabsDisponibles.slice();
-  let extrasArea = [], ocultos = new Set();
+  let extrasArea = [], ocultos = new Set(), ocultosSuc = new Set(); // ocultosSuc: lo que NO se vende en esta sucursal
   const tabDe = p => tabsBase.some(t => t.id === p.categoria) ? p.categoria : 'otro';
   function recalcularCatalogo() {
-    extrasArea = CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimentoActual);
+    extrasArea = CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimentoActual && !ocultosSuc.has(p.nombre) && (!p.soloSucursales || !p.soloSucursales.length || p.soloSucursales.includes(sucursalActual.id)));
     ocultos = new Set(CATALOGO.filter(p => p.base && p.oculto).map(p => p.nombre));
     tabsDisponibles.length = 0; tabsBase.forEach(t => tabsDisponibles.push(t));
     if (extrasArea.some(p => tabDe(p) === 'otro')) tabsDisponibles.push({ id: 'otro', lbl: ic('box',16)+' Otros' });
+    // no mostrar pestañas vacías (cuando la sucursal no vende nada de esa categoría)
+    const vacia = id => id === 'cafe' ? !ver('Café') && !ver('Té') && !extrasDeTab('cafe').length
+      : id === 'refresco' ? !['Personal', 'Cascada', 'Popular'].some(t => ver('Refresco ' + t)) && !extrasDeTab('refresco').length
+      : id === 'caja' ? !['Grande', 'Mediana'].some(t => ver('Caja ' + t)) : false;
+    for (let i = tabsDisponibles.length - 1; i > 0; i--) if (vacia(tabsDisponibles[i].id)) tabsDisponibles.splice(i, 1);
   }
   const extrasDeTab = id => extrasArea.filter(p => tabDe(p) === id);
-  const ver = n => !ocultos.has(n);
+  const ver = n => !ocultos.has(n) && !ocultosSuc.has(n);
   recalcularCatalogo();
 
   let tabActiva = tabsDisponibles[0].id;
@@ -1151,6 +1157,8 @@ async function pantallaPrincipal() {
     const iniciales = (comp.empleadoNombre.replace(' (prueba)','').match(/\b\w/g) || ['E']).slice(0,2).join('').toUpperCase();
 
     preciosSucursal = snapComp.exists ? (snapComp.data().precios || {}) : {};
+    ocultosSuc = new Set(snapComp.exists ? (snapComp.data().ocultos || []) : []);
+    recalcularCatalogo();
     armarPrecios();
 
     app.innerHTML = `
@@ -1276,40 +1284,47 @@ async function pantallaPrincipal() {
 // ============================================================
 // 9b) PANTALLA: Stock (ver actual + agregar en bloque)
 // ============================================================
-function listaItemsStock() {
+async function cargarOcultosComp() {
+  try {
+    const sn = await conTiempoLimite(db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual).get(), 8000, 'leer productos');
+    return new Set(sn.exists ? (sn.data().ocultos || []) : []);
+  } catch (e) { return new Set(); }
+}
+function listaItemsStock(oc) {
+  oc = oc || new Set();
   // nombre corto (sin "Pizza"/"Refresco") + a qué colección/documento corresponde
   const items = [];
   if (compartimentoActual === 'pizzeria') {
     itemsStockPizza().forEach(nombreCorto => items.push({
-      nombreCorto, categoria: 'Pizzas',
+      nombreCorto, completo: 'Pizza ' + nombreCorto, categoria: 'Pizzas',
       ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria').collection('stock').doc(slug(nombreCorto))
     }));
     if (sucursalActual.tieneCajasPizza) {
       TAMANOS_CAJA.forEach(t => items.push({
-        nombreCorto: `Caja ${t}`, categoria: 'Cajas de pizza',
+        nombreCorto: `Caja ${t}`, completo: `Caja ${t}`, categoria: 'Cajas de pizza',
         ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('pizzeria').collection('stock').doc(slug(`Caja ${t}`))
       }));
     }
   } else {
     items.push({
-      nombreCorto: 'Salteña mixta', categoria: 'Salteñas',
+      nombreCorto: 'Salteña mixta', completo: 'Salteña mixta', categoria: 'Salteñas',
       ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc('salteneria').collection('stock').doc('saltena-mixta')
     });
   }
   TAMANOS_REFRESCO.forEach(t => items.push({
-    nombreCorto: t, categoria: 'Refrescos (compartido)',
+    nombreCorto: t, completo: 'Refresco ' + t, categoria: 'Refrescos (compartido)',
     ref: db.collection('sucursales').doc(sucursalActual.id).collection('stockRefrescos').doc(slug(t))
   }));
-  CATALOGO.filter(p => !p.base && p.activo !== false && p.controlaStock && p.area === compartimentoActual).forEach(p => items.push({
-    nombreCorto: p.nombre, categoria: 'Productos agregados',
+  CATALOGO.filter(p => !p.base && p.activo !== false && p.controlaStock && p.area === compartimentoActual && (!p.soloSucursales || !p.soloSucursales.length || p.soloSucursales.includes(sucursalActual.id))).forEach(p => items.push({
+    nombreCorto: p.nombre, completo: p.nombre, categoria: 'Productos agregados',
     ref: db.collection('sucursales').doc(sucursalActual.id).collection('compartimentos').doc(compartimentoActual).collection('stock').doc('x-' + slug(p.nombre))
   }));
-  return items;
+  return items.filter(it => !oc.has(it.completo));
 }
 
 async function pantallaStock() {
   app.innerHTML = `<div class="empty-state">Cargando stock…</div>`;
-  const items = listaItemsStock();
+  const items = listaItemsStock(await cargarOcultosComp());
   let actuales;
   try {
     const snaps = await conTiempoLimite(Promise.all(items.map(it => it.ref.get())), 15000, 'cargar stock');
@@ -1623,7 +1638,7 @@ async function pantallaHistorial() {
                   </div>`;
                   if (m.tipo === 'gasto') return `
                   <div class="row ${m.anulado ? 'anulada' : ''}" style="padding:6px 0;border-bottom:1px solid var(--border);">
-                    <span class="t-body">${m.motivo} <span class="badge badge-danger">${m.anulado ? 'Gasto anulado' : 'Gasto'}</span>${m.anulado ? ` <span class="t-secondary">${escHtml(m.anuladoMotivo || '')}</span>` : ''}</span>
+                    <span class="t-body">${escHtml(m.motivo)} <span class="badge badge-danger">${m.anulado ? 'Gasto anulado' : 'Gasto'}</span>${m.anulado ? ` <span class="t-secondary">${escHtml(m.anuladoMotivo || '')}</span>` : ''}</span>
                     <span style="display:flex;align-items:center;"><strong style="color:var(--danger);">−${m.monto.toFixed(2)} Bs</strong>${puedeAnular(m) ? `<button class="link-anular" data-anular="gasto:${m.id}">Anular</button>` : ''}</span>
                   </div>`;
                   if (m.tipo === 'retiro') return `
@@ -1782,7 +1797,7 @@ async function pantallaCaja() {
         <div class="card-flat">
           ${gastosHoy.length === 0 ? `<div class="t-secondary">Sin gastos registrados hoy.</div>` : gastosHoy.map(g => `
             <div class="row ${g.anulado ? 'anulada' : ''}" style="padding:6px 0;border-bottom:1px solid var(--border);">
-              <span class="t-body">${g.motivo}${g.anulado ? ` <span class="badge badge-danger">Anulado</span> <span class="t-secondary">${escHtml(g.anuladoMotivo || '')}</span>` : ''}</span>
+              <span class="t-body">${escHtml(g.motivo)}${g.anulado ? ` <span class="badge badge-danger">Anulado</span> <span class="t-secondary">${escHtml(g.anuladoMotivo || '')}</span>` : ''}</span>
               <span style="display:flex;align-items:center;"><strong style="color:var(--danger);">−${g.monto.toFixed(2)} Bs</strong>${g.anulado ? '' : `<button class="link-anular" data-anular-gasto="${g.id}">Anular</button>`}</span>
             </div>
           `).join('')}
@@ -1831,7 +1846,7 @@ async function pantallaCaja() {
       const dif = difDe(), el = document.getElementById('cierre-dif');
       if (dif === null) { el.textContent = ''; document.getElementById('campo-nota-cierre').style.display = 'none'; return; }
       const cuadra = Math.abs(dif) < 0.01;
-      el.innerHTML = cuadra ? '<b style="color:var(--up,green)">La caja cuadra.</b>' : `<b style="color:var(--danger);">${dif > 0 ? 'Sobra' : 'Falta'} ${Math.abs(dif).toFixed(2)} Bs</b>`;
+      el.innerHTML = cuadra ? '<b style="color:var(--success)">La caja cuadra.</b>' : `<b style="color:var(--danger);">${dif > 0 ? 'Sobra' : 'Falta'} ${Math.abs(dif).toFixed(2)} Bs</b>`;
       document.getElementById('campo-nota-cierre').style.display = cuadra ? 'none' : 'block';
     };
     document.getElementById('btn-guardar-cierre').onclick = async () => {

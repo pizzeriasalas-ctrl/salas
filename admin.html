@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#211d30">
 <link rel="manifest" href="manifest-admin.webmanifest">
 <link rel="icon" href="icon-admin-192.png">
-<link rel="apple-touch-icon" href="icon-admin-192.png">
+<link rel="apple-touch-icon" href="icon-admin-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Panel Salas">
@@ -610,7 +610,7 @@ function productosDe(compartimento, s, sinExtras) {
     lista.push('Salteña mixta', 'Café', 'Té');
   }
   TAMANOS_REFRESCO.forEach(t => lista.push(`Refresco ${t}`));
-  if (!sinExtras) CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimento).forEach(p => lista.push(p.nombre));
+  if (!sinExtras) CATALOGO.filter(p => !p.base && p.activo !== false && p.area === compartimento && (!p.soloSucursales || !p.soloSucursales.length || p.soloSucursales.includes(s.id))).forEach(p => lista.push(p.nombre));
   return lista;
 }
 
@@ -764,7 +764,7 @@ async function pantallaProductos() {
         ${nuevos.length === 0 ? `<div class="card"><div class="t-secondary">Todavía no agregaste productos. Toca "+ Agregar producto".</div></div>` : nuevos.map(p => `
           <div class="card">
             <div class="t-subtitle">${esc(p.nombre)}${p.activo === false ? ' <span class="t-secondary">(oculto)</span>' : ''}</div>
-            <div class="t-secondary">${CATS_PROD[p.categoria] || 'Otro'} · ${AREAS_PROD[p.area] || ''} · ${p.precio > 0 ? p.precio + ' Bs' : 'sin precio'} · ${p.controlaStock ? 'con stock' : 'sin stock'}</div>
+            <div class="t-secondary">${CATS_PROD[p.categoria] || 'Otro'} · ${AREAS_PROD[p.area] || ''} · ${p.precio > 0 ? p.precio + ' Bs' : 'sin precio'} · ${p.controlaStock ? 'con stock' : 'sin stock'}${(p.soloSucursales || []).length ? ' · solo en ' + p.soloSucursales.length + ' sucursal(es)' : ''}</div>
             <div class="row" style="gap:8px;margin-top:10px;"><button class="btn btn-secondary" data-editar="${p.id}">Editar</button><button class="btn btn-secondary" data-vis="${p.id}">${p.activo === false ? 'Mostrar' : 'Ocultar'}</button></div>
           </div>`).join('')}
         <details class="card"><summary class="t-subtitle">Productos de siempre (${base.length})</summary>
@@ -784,7 +784,14 @@ async function pantallaProductos() {
   render();
 }
 
-function pantallaFormProducto(p) {
+let SUCURSALES_CACHE = [];
+async function pantallaFormProducto(p) {
+  if (!SUCURSALES_CACHE.length) {
+    try { SUCURSALES_CACHE = (await db.collection('sucursales').get()).docs.map(d => ({ id: d.id, ...d.data() })).sort((x, y) => (x.orden || 99) - (y.orden || 99)); } catch (e) { /* sin internet: solo "todas" */ }
+  }
+  pantallaFormProductoRender(p);
+}
+function pantallaFormProductoRender(p) {
   const nuevo = !p;
   p = p || { categoria: 'refresco', area: 'pizzeria', controlaStock: true };
   app.innerHTML = `
@@ -793,6 +800,8 @@ function pantallaFormProducto(p) {
       <div class="field"><label>Nombre (como lo verá el empleado)</label><input type="text" id="in-nom" maxlength="40" value="${esc(p.nombre || '')}" placeholder="Ej: Jugo de naranja" ${nuevo ? '' : 'readonly style="opacity:.7;"'}>${nuevo ? '' : '<div class="t-secondary" style="margin-top:4px;">El nombre no se puede cambiar (así no se pierde su stock ni su historial). Si necesitas otro nombre, oculta este producto y crea uno nuevo.</div>'}</div>
       <div class="field"><label>¿Qué es?</label><select id="in-cat">${Object.keys(CATS_PROD).map(k => `<option value="${k}" ${p.categoria === k ? 'selected' : ''}>${CATS_PROD[k]}</option>`).join('')}</select></div>
       <div class="field"><label>¿En qué área se vende?</label><select id="in-area">${Object.keys(AREAS_PROD).map(k => `<option value="${k}" ${p.area === k ? 'selected' : ''}>${AREAS_PROD[k]}</option>`).join('')}</select></div>
+      <div class="field"><label>¿En qué sucursales se vende?</label><select id="in-suc"><option value="todas" ${(p.soloSucursales || []).length ? '' : 'selected'}>En todas</option><option value="algunas" ${(p.soloSucursales || []).length ? 'selected' : ''}>Solo en algunas</option></select></div>
+      <div class="card-flat" id="lista-suc" style="display:${(p.soloSucursales || []).length ? 'block' : 'none'};">${SUCURSALES_CACHE.map(x => `<label class="row" style="padding:6px 0;border-bottom:1px solid var(--border);"><span class="t-body">${esc(x.nombre)}</span><input type="checkbox" data-suc="${x.id}" ${(p.soloSucursales || []).includes(x.id) ? 'checked' : ''}></label>`).join('') || '<div class="t-secondary">No se pudo cargar la lista de sucursales.</div>'}</div>
       <div class="field"><label>Precio en Bs (si lo dejas vacío, el empleado lo escribe)</label><input type="number" id="in-pre" inputmode="decimal" value="${p.precio > 0 ? p.precio : ''}" placeholder="0.00"></div>
       <div class="row"><span class="t-body">¿Controlar stock?</span><div class="toggle" id="tg-stock" style="width:140px;"><button data-v="si" class="${p.controlaStock ? 'active' : ''}">Sí</button><button data-v="no" class="${!p.controlaStock ? 'active' : ''}">No</button></div></div>
       <div class="t-secondary" id="aviso-stock" style="display:none;background:var(--surface-2,rgba(255,170,0,.14));border-radius:10px;padding:10px 12px;">⚠ Este producto empieza con <b>0 unidades</b>. Antes de venderlo, el empleado debe cargar su stock en la pestaña Stock de cada sucursal.</div>
@@ -800,6 +809,7 @@ function pantallaFormProducto(p) {
       <div class="error-text" id="prod-error"></div>
     </div>`;
   document.getElementById('btn-atras').onclick = () => pantallaProductos();
+  document.getElementById('in-suc').onchange = e => { document.getElementById('lista-suc').style.display = e.target.value === 'algunas' ? 'block' : 'none'; };
   let stock = !!p.controlaStock;
   const avisoStock = () => { document.getElementById('aviso-stock').style.display = (stock && (nuevo || !p.controlaStock)) ? 'block' : 'none'; };
   avisoStock();
@@ -811,7 +821,9 @@ function pantallaFormProducto(p) {
     if (!nombre) { err.textContent = 'Ponle un nombre al producto.'; return; }
     const repetido = nombresBase().concat(CATALOGO.filter(x => !x.base && x.id !== p.id).map(x => x.nombre)).some(n => n.toLowerCase() === nombre.toLowerCase());
     if (repetido) { err.textContent = 'Ya existe un producto con ese nombre.'; return; }
-    const datos = { nombre, categoria: document.getElementById('in-cat').value, area: document.getElementById('in-area').value, precio: pre > 0 ? pre : null, controlaStock: stock, activo: p.activo !== false, base: false, schemaVersion: 1 };
+    const soloSuc = document.getElementById('in-suc').value === 'algunas' ? [...document.querySelectorAll('[data-suc]')].filter(c => c.checked).map(c => c.dataset.suc) : [];
+    if (document.getElementById('in-suc').value === 'algunas' && !soloSuc.length) { err.textContent = 'Elige al menos una sucursal.'; return; }
+    const datos = { soloSucursales: soloSuc, nombre, categoria: document.getElementById('in-cat').value, area: document.getElementById('in-area').value, precio: pre > 0 ? pre : null, controlaStock: stock, activo: p.activo !== false, base: false, schemaVersion: 1 };
     const id = nuevo ? 'p-' + idSeguro(nombre) + '-' + Date.now().toString(36) : p.id;
     guardarProducto(id, datos);
     pantallaProductos();
@@ -1132,10 +1144,11 @@ function pantallaEditarEmpleado(s, compartimento, volver) {
 async function pantallaEditarPrecios(s, compartimento, volver) {
   app.innerHTML = `<div class="empty-state">Cargando precios…</div>`;
   const compRef = db.collection('sucursales').doc(s.id).collection('compartimentos').doc(compartimento);
-  let precios;
+  let precios, ocultosSucursal = [];
   try {
     const snap = await conTiempoLimite(compRef.get(), 15000, 'cargar precios');
     precios = snap.exists ? (snap.data().precios || {}) : {};
+    ocultosSucursal = snap.exists ? (snap.data().ocultos || []) : [];
   } catch (e) {
     return mostrarError('cargar precios', e);
   }
@@ -1151,11 +1164,11 @@ async function pantallaEditarPrecios(s, compartimento, volver) {
       <div style="width:38px;"></div>
     </div>
     <div class="px stack">
-      <div class="t-secondary">${s.nombre} — deja en blanco lo que aún no quieras fijar. En los productos agregados, si lo dejas en blanco se usa el precio que les pusiste en Productos (se ve en gris).</div>
+      <div class="t-secondary">${s.nombre} — quita la marca ✓ de lo que NO se vende aquí. Deja el precio en blanco si aún no quieres fijarlo. En los productos agregados, si lo dejas en blanco se usa el precio que les pusiste en Productos (se ve en gris).</div>
       <div class="card-flat">
         ${productos.map(p => `
           <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);">
-            <span class="t-body">${p}</span>
+            <label class="t-body" style="display:flex;align-items:center;gap:8px;flex:1;"><input type="checkbox" data-vende="${esc(p)}" ${ocultosSucursal.includes(p) ? '' : 'checked'}> ${esc(p)}</label>
             <input type="number" inputmode="decimal" data-precio="${esc(p)}" value="${precios[p] != null ? precios[p] : ''}" placeholder="${(() => { const x = CATALOGO.find(c => !c.base && c.nombre === p); return x && x.precio > 0 ? x.precio : ''; })()}"
               style="width:84px;text-align:right;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);">
           </div>
@@ -1173,9 +1186,10 @@ async function pantallaEditarPrecios(s, compartimento, volver) {
       const v = parseFloat(input.value);
       if (!isNaN(v) && v > 0) nuevosPrecios[input.dataset.precio] = v;
     });
+    const nuevosOcultos = [...document.querySelectorAll('[data-vende]')].filter(c => !c.checked).map(c => c.dataset.vende);
     errorEl.textContent = '';
     try {
-      await noEsperar(compRef.set({ precios: nuevosPrecios }, { merge: true }));
+      await noEsperar(compRef.set({ precios: nuevosPrecios, ocultos: nuevosOcultos }, { merge: true }));
       volver();
     } catch (e) {
       errorEl.textContent = 'No se pudo guardar.';
@@ -1744,7 +1758,7 @@ async function pantallaImportar(existentes) {
   app.innerHTML = `
     <div class="header"><button class="header-btn" id="btn-atras">${ic('back')}</button><div class="t-subtitle">Importar sucursales</div><div style="width:38px;"></div></div>
     <div class="px stack">
-      <div class="t-secondary">Elige el archivo <b>sucursales-carga.json</b> (o pega su contenido). Primero se revisa y solo después se importa. Las sucursales que ya existen se omiten.</div>
+      <div class="t-secondary">Elige el archivo <b>sucursales-carga.json</b> (o pega su contenido). Primero se revisa y solo después se importa. Si una sucursal ya existe, se actualizan sus empleados, precios y productos (los PIN no cambian).</div>
       <input type="file" id="in-archivo" accept=".json,application/json">
       <div class="field"><label>Contenido del archivo</label><textarea id="in-json" rows="7" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);font-size:.8rem;"></textarea></div>
       <button class="btn btn-secondary" id="btn-revisar">Revisar</button>
@@ -1765,14 +1779,24 @@ async function pantallaImportar(existentes) {
     try { datos = JSON.parse(document.getElementById('in-json').value); } catch (e) { res.innerHTML = '<div class="error-text">El contenido no es un archivo válido.</div>'; return; }
     const lista = Array.isArray(datos.sucursales) ? datos.sucursales : [];
     if (!lista.length) { res.innerHTML = '<div class="error-text">No hay sucursales en el archivo.</div>'; return; }
-    const nombresExistentes = new Set(existentes.map(s => norm(s.nombre)));
+    const porNombre = new Map(existentes.map(s => [norm(s.nombre), s]));
     const pinsUsados = new Set();
     existentes.forEach(s => Object.values(s.compartimentos || {}).forEach(c => { if (c && c.pin) pinsUsados.add(String(c.pin)); }));
-    const ok = [], omitidas = [], errores = [];
+    const ok = [], actualizar = [], errores = [];
     lista.forEach(x => {
       const n = (x.nombre || '').trim();
       if (!n) { errores.push('Hay una sucursal sin nombre.'); return; }
-      if (nombresExistentes.has(norm(n))) { omitidas.push(n); return; }
+      const exAnt = porNombre.get(norm(n)) || (x.antes ? porNombre.get(norm(x.antes)) : null);   // "antes": nombre anterior (si cambió de nombre)
+      if (exAnt) {
+        const ex = exAnt;
+        if (x.tieneSalteneria && !(ex.compartimentos && ex.compartimentos.salteneria)) {   // la sucursal aún no tenía salteñería: hace falta su PIN
+          const p = String(x.salteneria && x.salteneria.pin);
+          if (!/^\d{4}$/.test(p)) { errores.push(n + ': falta un PIN de 4 dígitos para la salteñería.'); return; }
+          if (pinsUsados.has(p)) { errores.push(n + ': el PIN ' + p + ' ya lo usa otro empleado.'); return; }
+          pinsUsados.add(p);
+        }
+        actualizar.push({ x, ex }); return;
+      }
       const pins = [x.pizzeria && x.pizzeria.pin].concat(x.tieneSalteneria ? [x.salteneria && x.salteneria.pin] : []).map(String);
       const mal = pins.find(p => !/^\d{4}$/.test(p));
       if (mal !== undefined) { errores.push(n + ': todos los PIN deben tener 4 dígitos.'); return; }
@@ -1782,10 +1806,10 @@ async function pantallaImportar(existentes) {
       ok.push(x);
     });
     res.innerHTML = `
-      <div class="card"><b>${ok.length}</b> sucursal(es) listas para importar${omitidas.length ? `<div class="t-secondary">Ya existen y se omiten: ${omitidas.map(esc).join(', ')}.</div>` : ''}
+      <div class="card"><b>${ok.length}</b> sucursal(es) nuevas${actualizar.length ? `<div class="t-secondary">Ya existen y se actualizan (${actualizar.length}): ${actualizar.map(u => esc(u.x.nombre)).join(', ')}.</div>` : ''}${(datos.catalogo || []).length ? `<div class="t-secondary">Productos extra: ${datos.catalogo.length}.</div>` : ''}
         ${ok.length ? `<div class="t-secondary" style="margin-top:6px;">${ok.map(x => esc(x.nombre)).join(' · ')}</div>` : ''}</div>
       ${errores.length ? `<div class="error-text">${errores.map(esc).join('<br>')}</div>` : ''}
-      ${ok.length && !errores.length ? '<button class="btn btn-primary" id="btn-importar">Importar ahora</button><div class="t-secondary" id="import-msg"></div>' : ''}`;
+      ${(ok.length || actualizar.length) && !errores.length ? '<button class="btn btn-primary" id="btn-importar">Importar ahora</button><div class="t-secondary" id="import-msg"></div>' : ''}`;
     const bi = document.getElementById('btn-importar');
     if (!bi) return;
     bi.onclick = async () => {
@@ -1793,16 +1817,33 @@ async function pantallaImportar(existentes) {
       bi.disabled = true; document.getElementById('import-msg').textContent = 'Importando…';
       try {
         const batch = db.batch();
+        const idPorNombre = new Map(existentes.map(s => [norm(s.nombre), s.id]));
+        actualizar.forEach(({ x, ex }) => {
+          const upd = { tieneCajasPizza: !!x.tieneCajasPizza, nombre: x.nombre.trim() };
+          if ((x.pizzeria.empleado || '').trim()) upd['compartimentos.pizzeria.empleadoNombre'] = x.pizzeria.empleado.trim();
+          if (x.tieneSalteneria && x.salteneria) {
+            if (ex.compartimentos && ex.compartimentos.salteneria) { if ((x.salteneria.empleado || '').trim()) upd['compartimentos.salteneria.empleadoNombre'] = x.salteneria.empleado.trim(); }
+            else { upd['compartimentos.salteneria'] = { empleadoNombre: (x.salteneria.empleado || '').trim() || 'Empleado Salteñería', pin: String(x.salteneria.pin) }; upd.tieneSalteneria = true; }
+          }
+          batch.update(db.collection('sucursales').doc(ex.id), upd);
+          batch.set(db.collection('sucursales').doc(ex.id).collection('compartimentos').doc('pizzeria'), { precios: x.pizzeria.precios || {}, ocultos: x.pizzeria.ocultos || [] }, { merge: true });
+          if (x.tieneSalteneria && x.salteneria) batch.set(db.collection('sucursales').doc(ex.id).collection('compartimentos').doc('salteneria'), { precios: x.salteneria.precios || {}, ocultos: x.salteneria.ocultos || [] }, { merge: true });
+        });
         ok.forEach(x => {
           const ref = db.collection('sucursales').doc();
+          idPorNombre.set(norm(x.nombre), ref.id);
           const compartimentos = { pizzeria: { empleadoNombre: (x.pizzeria.empleado || '').trim() || 'Empleado Pizzería', pin: String(x.pizzeria.pin) } };
           if (x.tieneSalteneria) compartimentos.salteneria = { empleadoNombre: (x.salteneria.empleado || '').trim() || 'Empleado Salteñería', pin: String(x.salteneria.pin) };
           batch.set(ref, { nombre: x.nombre.trim(), zona: x.zona || '', orden: x.orden || 99, activo: true, tieneSalteneria: !!x.tieneSalteneria, tieneCajasPizza: !!x.tieneCajasPizza, compartimentos, schemaVersion: 1 });
-          batch.set(ref.collection('compartimentos').doc('pizzeria'), { precios: x.pizzeria.precios || {} }, { merge: true });
-          if (x.tieneSalteneria) batch.set(ref.collection('compartimentos').doc('salteneria'), { precios: x.salteneria.precios || {} }, { merge: true });
+          batch.set(ref.collection('compartimentos').doc('pizzeria'), { precios: x.pizzeria.precios || {}, ocultos: x.pizzeria.ocultos || [] }, { merge: true });
+          if (x.tieneSalteneria) batch.set(ref.collection('compartimentos').doc('salteneria'), { precios: x.salteneria.precios || {}, ocultos: x.salteneria.ocultos || [] }, { merge: true });
+        });
+        (datos.catalogo || []).forEach(c => {
+          const ids = (c.soloEn || []).map(n => idPorNombre.get(norm(n))).filter(Boolean);
+          batch.set(db.collection('productos').doc('p-' + idSeguro(c.nombre) + '-' + c.area), { nombre: c.nombre, categoria: c.categoria || 'otro', area: c.area, precio: c.precio > 0 ? c.precio : null, controlaStock: !!c.controlaStock, activo: true, base: false, soloSucursales: ids, schemaVersion: 1 }, { merge: true });
         });
         await conTiempoLimite(batch.commit(), 30000, 'importar sucursales');
-        document.getElementById('import-msg').textContent = 'Listo: ' + ok.length + ' sucursales importadas.';
+        document.getElementById('import-msg').textContent = 'Listo: ' + ok.length + ' nuevas y ' + actualizar.length + ' actualizadas.';
         setTimeout(() => pantallaPanel(), 1200);
       } catch (e) {
         bi.disabled = false;
