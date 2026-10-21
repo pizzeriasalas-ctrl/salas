@@ -1870,6 +1870,7 @@ async function pantallaDatos() {
         </div>
         <div class="t-secondary" style="text-align:center;">Excel con hoja Resumen (por área y total), Ventas, Gastos, Bajas, Retiros, Cierres de caja y Anuladas, cada una con el nombre del empleado.</div>
         <div class="card stack"><div class="t-body"><b>Archivar meses antiguos</b></div><div class="t-secondary">Descarga en Excel todo lo anterior a los últimos 3 meses y, si lo confirmas, lo borra de la app para que siga rápida. Los saldos de caja y el stock no cambian.</div><button class="btn btn-secondary" id="btn-archivar">Archivar y liberar espacio</button></div>
+        <div class="card stack"><div class="t-body"><b>Reiniciar a cero</b></div><div class="t-secondary">Borra ventas, gastos, bajas, retiros y cierres, deja la caja y el stock en 0, y conserva empleados, PIN, precios y catálogo. Antes descarga un Excel de respaldo. No se puede deshacer.</div><div class="field"><label>Sucursal</label><select id="sel-reset"><option value="todas">Todas las sucursales</option>${sucursales.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('')}</select></div><button class="btn btn-danger" id="btn-reset">Reiniciar a cero</button><div class="error-text" id="reset-msg"></div></div>
         <button class="btn btn-secondary" id="btn-importar-suc">Importar sucursales desde archivo</button>
         <button class="btn btn-secondary" id="btn-cerrar-sesion">Cerrar sesión del panel</button>
       </div>
@@ -1879,6 +1880,7 @@ async function pantallaDatos() {
     document.getElementById('sel-suc').onchange = e => { sucDatos = e.target.value; };
     document.getElementById('btn-excel').onclick = () => exportar(false);
     document.getElementById('btn-archivar').onclick = () => exportar(true);
+    document.getElementById('btn-reset').onclick = () => reiniciarACero();
     document.getElementById('btn-importar-suc').onclick = () => pantallaImportar(sucursales);
     document.getElementById('btn-cerrar-sesion').onclick = async () => {
       if (!navigator.onLine) { alert('Conéctate a internet para cerrar sesión (así no se pierde ningún cambio pendiente).'); return; }
@@ -1911,8 +1913,8 @@ async function pantallaDatos() {
       });
       q(db.collection('sucursales').doc(s.id).collection('mermasCompartidas'), 'Baja', s, 'Compartido', (x, t) => [x.fecha, hora(x), s.nombre, 'Compartido', t, x.producto + (x.motivo ? ' (' + x.motivo + ')' : ''), x.cantidad, '', '', '', emp(x)]);
     });
-    try { await conTiempoLimite(Promise.all(T), 40000, 'leer el historial'); } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo leer el historial. Revisa tu conexión.'; return; }
-    if (!filas.length) { msg.textContent = archivar ? 'No hay nada para archivar: todo es de los últimos 3 meses.' : 'No hay movimientos en ese período.'; return; }
+    try { await conTiempoLimite(Promise.all(T), 40000, 'leer el historial'); } catch (e) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo leer el historial. Revisa tu conexión.'; return false; }
+    if (!filas.length) { msg.textContent = archivar ? 'No hay nada para archivar: todo es de los últimos 3 meses.' : 'No hay movimientos en ese período.'; return true; }
     filas.sort((a, b) => (b[0] + b[1]).localeCompare(a[0] + a[1]));
     const rango = archivar ? 'archivo anterior al ' + hasta + ' · todas las sucursales' : { mes: 'este mes', '90': 'últimos 3 meses', todo: 'todo el historial' }[rangoDatos] + (sucDatos === 'todas' ? ' · todas las sucursales' : '');
     const bytes = crearXlsx(armarHojas(filas, lista, rango, hoy));
@@ -1930,6 +1932,58 @@ async function pantallaDatos() {
       return;
     }
     msg.textContent = filas.length + ' movimientos exportados.';
+    return true;
+  }
+  async function reiniciarACero() {
+    const msg = document.getElementById('reset-msg');
+    const sel = document.getElementById('sel-reset').value;
+    const lista = sucursales.filter(s => sel === 'todas' || s.id === sel);
+    if (!lista.length) return;
+    if (!navigator.onLine) { alert('Conéctate a internet para reiniciar.'); return; }
+    msg.style.color = 'var(--danger)'; msg.textContent = '';
+    const quien = sel === 'todas' ? 'TODAS las sucursales' : '"' + lista[0].nombre + '"';
+    if (!confirm('Vas a dejar en 0 ' + quien + ':\n\n- Se borran ventas, gastos, bajas, retiros y cierres.\n- La caja y el stock quedan en 0.\n- Se conservan empleados, PIN, precios y catálogo.\n\nPrimero se descargará un Excel de respaldo. Esto no se puede deshacer. ¿Continuar?')) return;
+    const palabra = prompt('Para confirmar escribe BORRAR (en mayúsculas):');
+    if (palabra === null || palabra.trim() !== 'BORRAR') { msg.style.color = 'var(--text-secondary)'; msg.textContent = 'Cancelado. No se borró nada.'; return; }
+    msg.style.color = 'var(--text-secondary)'; msg.textContent = 'Descargando respaldo…';
+    const rangoAnt = rangoDatos, sucAnt = sucDatos;
+    rangoDatos = 'todo'; sucDatos = sel;
+    let respaldo;
+    try { respaldo = await exportar(false); } finally { rangoDatos = rangoAnt; sucDatos = sucAnt; }
+    if (respaldo === false) { msg.style.color = 'var(--danger)'; msg.textContent = 'No se pudo hacer el respaldo. No se borró nada.'; return; }
+    msg.style.color = 'var(--text-secondary)'; msg.textContent = 'Reiniciando…';
+    const SUBS = ['ventas', 'gastos', 'mermas', 'cierres', 'retiros'], COMPS = ['pizzeria', 'salteneria'];
+    try {
+      const borrar = [], ceros = [], cajas = [], T = [];
+      lista.forEach(s => {
+        const sref = db.collection('sucursales').doc(s.id);
+        COMPS.forEach(c => {
+          const cref = sref.collection('compartimentos').doc(c);
+          SUBS.forEach(n => T.push(cref.collection(n).get().then(q => q.docs.forEach(d => borrar.push(d.ref)))));
+          T.push(cref.collection('stock').get().then(q => q.docs.forEach(d => ceros.push(d.ref))));
+        });
+        T.push(sref.collection('mermasCompartidas').get().then(q => q.docs.forEach(d => borrar.push(d.ref))));
+        T.push(sref.collection('stockRefrescos').get().then(q => q.docs.forEach(d => ceros.push(d.ref))));
+        compsDe(s).forEach(c => cajas.push(sref.collection('compartimentos').doc(c)));
+      });
+      await conTiempoLimite(Promise.all(T), 60000, 'leer los datos a borrar');
+      const ops = [
+        ...borrar.map(r => b => b.delete(r)),
+        ...ceros.map(r => b => b.set(r, { cantidad: 0 }, { merge: true })),
+        ...cajas.map(r => b => b.set(r, { cajaEfectivo: 0, cajaTotal: 0, cajaInicializada: true }, { merge: true }))
+      ];
+      for (let i = 0; i < ops.length; i += 400) {
+        const b = db.batch();
+        ops.slice(i, i + 400).forEach(f => f(b));
+        await conTiempoLimite(b.commit(), 30000, 'reiniciar');
+        msg.textContent = 'Reiniciando… ' + Math.min(i + 400, ops.length) + ' de ' + ops.length;
+      }
+      msg.style.color = 'var(--success, var(--text-secondary))';
+      msg.textContent = 'Listo: ' + quien + ' quedó en 0 (' + borrar.length + ' registros borrados, ' + ceros.length + ' productos de stock en 0, caja en 0).';
+    } catch (e) {
+      msg.style.color = 'var(--danger)';
+      msg.textContent = 'No se pudo terminar el reinicio. El respaldo ya está descargado; vuelve a intentarlo (es seguro repetirlo).';
+    }
   }
   render();
 }
